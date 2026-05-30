@@ -530,3 +530,31 @@ generation.total_tokens
 generation.mode = llm
 generation.dry_run = false
 ```
+
+## 20. 手动检查 LLM Citation Verifier
+
+当 `.env` 中配置了：
+
+```text
+RESEARCHOS_LLM_CLIENT=openai_compatible
+VERIFIER_MODEL=qwen-plus
+VERIFIER_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+```
+
+完整 research run 会在 claim verification 阶段调用 LLM verifier。
+
+查看校验结果：
+
+```powershell
+Invoke-RestMethod "http://localhost:8000/v1/research-runs/$($llmRun.run_id)/artifacts/content?path=evidence/citation_verification.json"
+```
+
+如果 LLM verifier 成功，通常会看到：
+
+```text
+verification_id = ver_local_001_llm
+support_status = supported / partially_supported / unsupported / contradicted / not_enough_information
+rationale = LLM 返回的判断理由
+```
+
+如果 LLM verifier 失败，系统会回退到规则版 verifier，`verification_id` 通常不带 `_llm`，并且 `rationale` 里会记录 fallback 原因。

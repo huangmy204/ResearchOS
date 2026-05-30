@@ -9,6 +9,7 @@ from researchos.reporting import EvidenceReportWriter, LLMReportWriter, ReportWr
 from researchos.retrieval.factory import build_retriever
 from researchos.runtime import ResearchWorkflow
 from researchos.stores import ArtifactStore, EventStore, RunStore, Workspace
+from researchos.verification import CitationVerifier, LLMCitationVerifier, RuleBasedCitationVerifier
 
 
 @dataclass
@@ -32,12 +33,14 @@ def build_services(settings: Settings) -> AppServices:
     model_router = ModelRouter(settings)
     llm_client = build_llm_client(settings)
     report_writer = build_report_writer(settings, model_router, llm_client)
+    citation_verifier = build_citation_verifier(settings, model_router, llm_client)
     workflow = ResearchWorkflow(
         run_store,
         event_store,
         artifact_store,
         retriever=build_retriever(settings.retrieval_strategy),
         report_writer=report_writer,
+        citation_verifier=citation_verifier,
     )
     return AppServices(
         settings=settings,
@@ -73,3 +76,18 @@ def build_report_writer(
             fallback_writer=fallback_writer,
         )
     return fallback_writer
+
+
+def build_citation_verifier(
+    settings: Settings,
+    model_router: ModelRouter,
+    llm_client: LLMClient,
+) -> CitationVerifier:
+    fallback_verifier = RuleBasedCitationVerifier()
+    if settings.llm_client == "openai_compatible":
+        return LLMCitationVerifier(
+            llm_client=llm_client,
+            verifier_profile=model_router.select("verifier"),
+            fallback_verifier=fallback_verifier,
+        )
+    return fallback_verifier

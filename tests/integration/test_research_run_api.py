@@ -9,6 +9,7 @@ from researchos.config import Settings
 from researchos.llm import LLMResponse
 from researchos.models_router import ModelProfile
 from researchos.reporting import LLMReportWriter
+from researchos.verification import LLMCitationVerifier
 
 
 def test_research_run_lifecycle_creates_artifacts(tmp_path):
@@ -363,6 +364,57 @@ def test_research_run_can_write_report_with_llm_writer(tmp_path):
     assert report_json["generation"]["dry_run"] is False
 
 
+def test_research_run_can_verify_claim_with_llm_verifier(tmp_path):
+    app = create_app(
+        Settings(
+            env="test",
+            workspace_root=tmp_path / "workspace",
+            runtime_profile="test",
+            log_level="INFO",
+            api_host="127.0.0.1",
+            api_port=8000,
+            cors_allow_origins=[],
+        )
+    )
+    app.state.services.workflow.step_delay_sec = 0
+    app.state.services.workflow.citation_verifier = LLMCitationVerifier(
+        llm_client=_StaticVerifierLLMClient(),
+        verifier_profile=ModelProfile(
+            role="verifier",
+            model="qwen-plus",
+            base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+            provider="openai_compatible",
+            configured=True,
+        ),
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/research-runs",
+            json={
+                "session_id": "session",
+                "query": "legal research citation risk",
+                "documents": [
+                    {
+                        "title": "Legal AI memo",
+                        "text": "Unsupported citations create legal research risk.",
+                    }
+                ],
+            },
+        )
+        run_id = response.json()["run_id"]
+        _wait_for_run_completion(client, run_id)
+
+        citation_verification = client.get(
+            f"/v1/research-runs/{run_id}/artifacts/content",
+            params={"path": "evidence/citation_verification.json"},
+        ).json()
+
+    assert citation_verification[0]["verification_id"] == "ver_local_001_llm"
+    assert citation_verification[0]["support_status"] == "supported"
+    assert citation_verification[0]["rationale"] == "The evidence directly supports the claim."
+
+
 def test_research_run_can_use_bm25_retrieval_strategy(tmp_path):
     app = create_app(
         Settings(
@@ -528,5 +580,22 @@ class _StaticWorkflowLLMClient:
             prompt_tokens=10,
             completion_tokens=20,
             total_tokens=30,
+            dry_run=False,
+        )
+
+
+class _StaticVerifierLLMClient:
+    def complete(self, request):
+        return LLMResponse(
+            content=(
+                '{"support_status":"supported",'
+                '"rationale":"The evidence directly supports the claim.",'
+                '"confidence":0.93}'
+            ),
+            model=request.profile.model,
+            provider=request.profile.provider,
+            prompt_tokens=10,
+            completion_tokens=12,
+            total_tokens=22,
             dry_run=False,
         )

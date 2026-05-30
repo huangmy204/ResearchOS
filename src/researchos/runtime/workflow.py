@@ -10,6 +10,7 @@ from researchos.retrieval import LocalKeywordRetriever, RetrievedChunk, Retrieve
 from researchos.stores.artifact_store import ArtifactStore
 from researchos.stores.event_store import EventStore
 from researchos.stores.run_store import RunStore
+from researchos.verification import CitationVerifier, RuleBasedCitationVerifier
 
 
 class WorkflowCancelled(Exception):
@@ -26,6 +27,7 @@ class ResearchWorkflow:
         artifact_store: ArtifactStore,
         retriever: Retriever | None = None,
         report_writer: ReportWriter | None = None,
+        citation_verifier: CitationVerifier | None = None,
         *,
         step_delay_sec: float = 0.05,
     ):
@@ -34,6 +36,7 @@ class ResearchWorkflow:
         self.artifact_store = artifact_store
         self.retriever = retriever or LocalKeywordRetriever()
         self.report_writer = report_writer or EvidenceReportWriter()
+        self.citation_verifier = citation_verifier or RuleBasedCitationVerifier()
         self.step_delay_sec = step_delay_sec
 
     async def run(self, run_id: str) -> None:
@@ -113,7 +116,11 @@ class ResearchWorkflow:
             )
             await self._pause(run.run_id)
 
-            verification = self._build_verification(claim, evidence, retrieved_chunk)
+            verification = self.citation_verifier.verify(
+                claim=claim,
+                evidence=evidence,
+                retrieved_chunk=retrieved_chunk,
+            )
             run = await self._advance(
                 run,
                 status="verifying",
@@ -326,28 +333,6 @@ class ResearchWorkflow:
             evidence_ids=[evidence.evidence_id],
             confidence=min(1.0, max(0.3, chunk.score)),
             verification_status="supported",
-        )
-
-    def _build_verification(
-        self,
-        claim: Claim,
-        evidence: Evidence,
-        chunk: RetrievedChunk | None,
-    ) -> CitationVerification:
-        if chunk is None:
-            rationale = "The claim matches the deterministic MVP workflow behavior."
-            confidence = 0.9
-        else:
-            rationale = "The claim is supported by the top-ranked local text chunk."
-            confidence = min(1.0, max(0.3, chunk.score))
-
-        return CitationVerification(
-            verification_id="ver_mvp_001" if chunk is None else "ver_local_001",
-            claim_id=claim.claim_id,
-            evidence_id=evidence.evidence_id,
-            support_status="supported",
-            rationale=rationale,
-            confidence=confidence,
         )
 
     def _write_evidence_artifacts(
