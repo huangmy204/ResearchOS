@@ -80,7 +80,26 @@ https://api.openai.com/v1
 
 如果你使用的是其他 OpenAI-compatible 服务，就填对应供应商给你的 base_url。
 
-## 4. PowerShell 临时配置
+## 4. 推荐配置：项目根目录 `.env`
+
+学习阶段最推荐在项目根目录创建 `.env`：
+
+```powershell
+Copy-Item .env.example .env
+```
+
+然后编辑 `.env`：
+
+```text
+RESEARCHOS_LLM_CLIENT=openai_compatible
+RESEARCHOS_LLM_API_KEY=你的 API key
+WRITER_MODEL=你的模型名
+WRITER_BASE_URL=https://api.openai.com/v1
+```
+
+`.env` 不会被提交，因为它已经在 `.gitignore` 里。
+
+## 5. PowerShell 临时配置
 
 临时配置只在当前 PowerShell 窗口有效，关闭窗口后会失效。适合学习和测试。
 
@@ -121,7 +140,7 @@ response.dry_run = false
 response.total_tokens > 0
 ```
 
-## 5. PowerShell 永久配置
+## 6. PowerShell 永久配置
 
 永久配置会写入当前 Windows 用户环境变量。配置后需要重新打开 PowerShell。
 
@@ -141,7 +160,7 @@ $env:WRITER_MODEL
 
 不要把 API key 打印给别人看，也不要截图泄露。
 
-## 6. 如何清除临时配置
+## 7. 如何清除临时配置
 
 当前 PowerShell 窗口里可以这样清除：
 
@@ -161,7 +180,7 @@ Remove-Item Env:WRITER_BASE_URL
 [Environment]::SetEnvironmentVariable("WRITER_BASE_URL", $null, "User")
 ```
 
-## 7. 为什么不能把 API key 写进代码
+## 8. 为什么不能把 API key 写进代码
 
 API key 是密钥，不是普通配置。
 
@@ -182,7 +201,7 @@ api_key = "sk-..."
 
 正确做法是：代码读取环境变量，密钥由运行环境注入。
 
-## 8. 面试怎么讲
+## 9. 面试怎么讲
 
 可以这样说：
 

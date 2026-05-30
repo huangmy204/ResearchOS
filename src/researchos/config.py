@@ -28,7 +28,25 @@ class Settings:
     llm_timeout_sec: float = 30.0
 
 
+def load_local_env(env_path: Path | None = None) -> bool:
+    path = env_path or Path(".env")
+    if not path.exists():
+        return False
+
+    for line in path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        key, value = stripped.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if key:
+            os.environ.setdefault(key, value)
+    return True
+
+
 def get_settings() -> Settings:
+    load_local_env()
     workspace_root = Path(os.getenv("RESEARCHOS_WORKSPACE_ROOT", "workspace"))
     origins = os.getenv("RESEARCHOS_CORS_ALLOW_ORIGINS", "http://localhost:3000")
     return Settings(

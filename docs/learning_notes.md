@@ -36,8 +36,9 @@
 8. RAG 检索、证据图、引用校验与评测。
 9. Model Router 与 LLM Client。
 10. 真实 LLM API 配置、密钥管理与错误处理。
-11. LangGraph 工作流。
-12. Docker 沙箱与部署。
+11. `.env` 本地密钥文件与环境变量优先级。
+12. LangGraph 工作流。
+13. Docker 沙箱与部署。
 
 ## 文档目录
 
