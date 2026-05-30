@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 
 from researchos.models.evidence import CitationVerification, Claim, Evidence, Source
 from researchos.models.run import ResearchRun, RunStatus
+from researchos.planning import ResearchPlanner, StaticResearchPlanner
 from researchos.reporting import EvidenceReportWriter, ReportWriter
 from researchos.retrieval import LocalKeywordRetriever, RetrievedChunk, Retriever
 from researchos.stores.artifact_store import ArtifactStore
@@ -26,6 +27,7 @@ class ResearchWorkflow:
         event_store: EventStore,
         artifact_store: ArtifactStore,
         retriever: Retriever | None = None,
+        research_planner: ResearchPlanner | None = None,
         report_writer: ReportWriter | None = None,
         citation_verifier: CitationVerifier | None = None,
         *,
@@ -35,6 +37,7 @@ class ResearchWorkflow:
         self.event_store = event_store
         self.artifact_store = artifact_store
         self.retriever = retriever or LocalKeywordRetriever()
+        self.research_planner = research_planner or StaticResearchPlanner()
         self.report_writer = report_writer or EvidenceReportWriter()
         self.citation_verifier = citation_verifier or RuleBasedCitationVerifier()
         self.step_delay_sec = step_delay_sec
@@ -47,26 +50,8 @@ class ResearchWorkflow:
             return
 
         try:
-            plan = [
-                {
-                    "step_id": "step_001",
-                    "goal": "Clarify the research question and define evidence requirements.",
-                    "agent": "planner",
-                    "expected_output": "research plan",
-                },
-                {
-                    "step_id": "step_002",
-                    "goal": "Collect initial sources for the query.",
-                    "agent": "searcher",
-                    "expected_output": "candidate source list",
-                },
-                {
-                    "step_id": "step_003",
-                    "goal": "Extract evidence spans and verify claim support.",
-                    "agent": "evidence_verifier",
-                    "expected_output": "evidence graph and report",
-                },
-            ]
+            plan = self.research_planner.plan(run)
+            self.artifact_store.write_json(run, "plans/research_plan.json", plan)
 
             run = await self._advance(
                 run,

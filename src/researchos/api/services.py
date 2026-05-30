@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from researchos.config import Settings
 from researchos.llm import LLMClient, MockLLMClient, OpenAICompatibleLLMClient
 from researchos.models_router import ModelRouter
+from researchos.planning import LLMResearchPlanner, ResearchPlanner, StaticResearchPlanner
 from researchos.reporting import EvidenceReportWriter, LLMReportWriter, ReportWriter
 from researchos.retrieval.factory import build_retriever
 from researchos.runtime import ResearchWorkflow
@@ -32,6 +33,7 @@ def build_services(settings: Settings) -> AppServices:
     artifact_store = ArtifactStore(workspace)
     model_router = ModelRouter(settings)
     llm_client = build_llm_client(settings)
+    research_planner = build_research_planner(settings, model_router, llm_client)
     report_writer = build_report_writer(settings, model_router, llm_client)
     citation_verifier = build_citation_verifier(settings, model_router, llm_client)
     workflow = ResearchWorkflow(
@@ -39,6 +41,7 @@ def build_services(settings: Settings) -> AppServices:
         event_store,
         artifact_store,
         retriever=build_retriever(settings.retrieval_strategy),
+        research_planner=research_planner,
         report_writer=report_writer,
         citation_verifier=citation_verifier,
     )
@@ -61,6 +64,21 @@ def build_llm_client(settings: Settings) -> LLMClient:
             timeout_sec=settings.llm_timeout_sec,
         )
     return MockLLMClient()
+
+
+def build_research_planner(
+    settings: Settings,
+    model_router: ModelRouter,
+    llm_client: LLMClient,
+) -> ResearchPlanner:
+    fallback_planner = StaticResearchPlanner()
+    if settings.llm_client == "openai_compatible":
+        return LLMResearchPlanner(
+            llm_client=llm_client,
+            planner_profile=model_router.select("planner"),
+            fallback_planner=fallback_planner,
+        )
+    return fallback_planner
 
 
 def build_report_writer(

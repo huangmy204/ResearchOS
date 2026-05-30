@@ -39,8 +39,9 @@
 11. `.env` 本地密钥文件与环境变量优先级。
 12. LLM writer、prompt 约束与 fallback 降级。
 13. LLM verifier、结构化 JSON 输出与证据支持判断。
-14. LangGraph 工作流。
-15. Docker 沙箱与部署。
+14. LLM planner、结构化计划与 LangGraph 前置设计。
+15. LangGraph 工作流。
+16. Docker 沙箱与部署。
 
 ## 文档目录
 

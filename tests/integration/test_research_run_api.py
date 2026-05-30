@@ -8,6 +8,7 @@ from researchos.api.main import create_app
 from researchos.config import Settings
 from researchos.llm import LLMResponse
 from researchos.models_router import ModelProfile
+from researchos.planning import LLMResearchPlanner
 from researchos.reporting import LLMReportWriter
 from researchos.verification import LLMCitationVerifier
 
@@ -300,6 +301,10 @@ def test_research_run_uses_local_documents_for_evidence(tmp_path):
             f"/v1/research-runs/{run_id}/artifacts/content",
             params={"path": "outputs/report.json"},
         ).json()
+        plan = client.get(
+            f"/v1/research-runs/{run_id}/artifacts/content",
+            params={"path": "plans/research_plan.json"},
+        ).json()
 
         assert sources[0]["title"] == "Legal AI memo"
         assert sources[0]["source_type"] == "file"
@@ -307,6 +312,7 @@ def test_research_run_uses_local_documents_for_evidence(tmp_path):
         assert retrieval_results[0]["score"] > 0
         assert report_json["sources"][0]["title"] == "Legal AI memo"
         assert report_json["evidence"][0]["evidence_id"] == evidence[0]["evidence_id"]
+        assert plan[0]["agent"] == "planner"
 
 
 def test_research_run_can_write_report_with_llm_writer(tmp_path):
@@ -413,6 +419,59 @@ def test_research_run_can_verify_claim_with_llm_verifier(tmp_path):
     assert citation_verification[0]["verification_id"] == "ver_local_001_llm"
     assert citation_verification[0]["support_status"] == "supported"
     assert citation_verification[0]["rationale"] == "The evidence directly supports the claim."
+
+
+def test_research_run_can_create_plan_with_llm_planner(tmp_path):
+    app = create_app(
+        Settings(
+            env="test",
+            workspace_root=tmp_path / "workspace",
+            runtime_profile="test",
+            log_level="INFO",
+            api_host="127.0.0.1",
+            api_port=8000,
+            cors_allow_origins=[],
+        )
+    )
+    app.state.services.workflow.step_delay_sec = 0
+    app.state.services.workflow.research_planner = LLMResearchPlanner(
+        llm_client=_StaticPlannerLLMClient(),
+        planner_profile=ModelProfile(
+            role="planner",
+            model="qwen-plus",
+            base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+            provider="openai_compatible",
+            configured=True,
+        ),
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/research-runs",
+            json={
+                "session_id": "session",
+                "query": "legal research citation risk",
+                "documents": [
+                    {
+                        "title": "Legal AI memo",
+                        "text": "Unsupported citations create legal research risk.",
+                    }
+                ],
+            },
+        )
+        run_id = response.json()["run_id"]
+        _wait_for_run_completion(client, run_id)
+
+        plan = client.get(
+            f"/v1/research-runs/{run_id}/artifacts/content",
+            params={"path": "plans/research_plan.json"},
+        ).json()
+        events = client.get(f"/v1/research-runs/{run_id}/events/history").json()["events"]
+
+    assert plan[0]["goal"] == "Scope citation risk"
+    assert plan[1]["agent"] == "reader"
+    plan_event = next(event for event in events if event["event_type"] == "plan.created")
+    assert plan_event["payload"]["steps"][0]["goal"] == "Scope citation risk"
 
 
 def test_research_run_can_use_bm25_retrieval_strategy(tmp_path):
@@ -597,5 +656,25 @@ class _StaticVerifierLLMClient:
             prompt_tokens=10,
             completion_tokens=12,
             total_tokens=22,
+            dry_run=False,
+        )
+
+
+class _StaticPlannerLLMClient:
+    def complete(self, request):
+        return LLMResponse(
+            content=(
+                '{"steps":['
+                '{"step_id":"step_001","goal":"Scope citation risk","agent":"planner",'
+                '"expected_output":"focused plan"},'
+                '{"step_id":"step_002","goal":"Read retrieved evidence","agent":"reader",'
+                '"expected_output":"evidence notes"}'
+                "]} "
+            ),
+            model=request.profile.model,
+            provider=request.profile.provider,
+            prompt_tokens=15,
+            completion_tokens=25,
+            total_tokens=40,
             dry_run=False,
         )

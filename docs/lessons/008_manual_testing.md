@@ -558,3 +558,36 @@ rationale = LLM 返回的判断理由
 ```
 
 如果 LLM verifier 失败，系统会回退到规则版 verifier，`verification_id` 通常不带 `_llm`，并且 `rationale` 里会记录 fallback 原因。
+
+## 21. 手动检查 LLM Research Planner
+
+当 `.env` 中配置了：
+
+```text
+RESEARCHOS_LLM_CLIENT=openai_compatible
+REASONING_MODEL=qwen-plus
+REASONING_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+```
+
+完整 research run 会在 planning 阶段调用 LLM planner。
+
+查看计划 artifact：
+
+```powershell
+Invoke-RestMethod "http://localhost:8000/v1/research-runs/$($llmRun.run_id)/artifacts/content?path=plans/research_plan.json"
+```
+
+如果 LLM planner 成功，你会看到模型生成的步骤：
+
+```text
+step_id
+goal
+agent
+expected_output
+```
+
+如果失败，系统会回退到静态计划，并在第一步中写入：
+
+```text
+planner_fallback_reason
+```
