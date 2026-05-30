@@ -591,3 +591,35 @@ expected_output
 ```text
 planner_fallback_reason
 ```
+
+## 22. 查看节点化 Workflow Trace
+
+完整 run 完成后，可以查看节点执行轨迹：
+
+```powershell
+Invoke-RestMethod "http://localhost:8000/v1/research-runs/$($llmRun.run_id)/artifacts/content?path=traces/workflow_trace.json"
+```
+
+重点看：
+
+```text
+nodes[].node
+nodes[].duration_ms
+nodes[].event_type
+nodes[].artifacts
+```
+
+当前节点顺序是：
+
+```text
+planning
+retrieval
+reading
+evidence_extraction
+verification
+report_writing
+evaluation
+completion
+```
+
+这份 trace 可以帮助你在面试里解释：一个 research run 不是一段黑盒文本生成，而是多个可追踪节点串起来的流程。

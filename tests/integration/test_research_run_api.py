@@ -305,6 +305,10 @@ def test_research_run_uses_local_documents_for_evidence(tmp_path):
             f"/v1/research-runs/{run_id}/artifacts/content",
             params={"path": "plans/research_plan.json"},
         ).json()
+        workflow_trace = client.get(
+            f"/v1/research-runs/{run_id}/artifacts/content",
+            params={"path": "traces/workflow_trace.json"},
+        ).json()
 
         assert sources[0]["title"] == "Legal AI memo"
         assert sources[0]["source_type"] == "file"
@@ -313,6 +317,17 @@ def test_research_run_uses_local_documents_for_evidence(tmp_path):
         assert report_json["sources"][0]["title"] == "Legal AI memo"
         assert report_json["evidence"][0]["evidence_id"] == evidence[0]["evidence_id"]
         assert plan[0]["agent"] == "planner"
+        assert [node["node"] for node in workflow_trace["nodes"]] == [
+            "planning",
+            "retrieval",
+            "reading",
+            "evidence_extraction",
+            "verification",
+            "report_writing",
+            "evaluation",
+            "completion",
+        ]
+        assert workflow_trace["nodes"][0]["artifacts"] == ["plans/research_plan.json"]
 
 
 def test_research_run_can_write_report_with_llm_writer(tmp_path):

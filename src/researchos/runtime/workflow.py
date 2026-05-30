@@ -2,12 +2,22 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime
+from time import perf_counter
 
-from researchos.models.evidence import CitationVerification, Claim, Evidence, Source
-from researchos.models.run import ResearchRun, RunStatus
+from researchos.models.run import ResearchRun
 from researchos.planning import ResearchPlanner, StaticResearchPlanner
 from researchos.reporting import EvidenceReportWriter, ReportWriter
-from researchos.retrieval import LocalKeywordRetriever, RetrievedChunk, Retriever
+from researchos.retrieval import LocalKeywordRetriever, Retriever
+from researchos.runtime.nodes import (
+    EvaluationNode,
+    EvidenceExtractionNode,
+    PlanningNode,
+    ReadingNode,
+    ReportWritingNode,
+    RetrievalNode,
+    VerificationNode,
+)
+from researchos.runtime.state import NodeResult, WorkflowNode, WorkflowState
 from researchos.stores.artifact_store import ArtifactStore
 from researchos.stores.event_store import EventStore
 from researchos.stores.run_store import RunStore
@@ -49,182 +59,113 @@ class ResearchWorkflow:
         if run.status == "cancelled":
             return
 
+        state = WorkflowState(run=run)
+        trace: list[dict] = []
         try:
-            plan = self.research_planner.plan(run)
-            self.artifact_store.write_json(run, "plans/research_plan.json", plan)
+            for node in self._build_nodes():
+                await self._execute_node(state, node, trace)
 
-            run = await self._advance(
-                run,
-                status="planning",
-                step_name="creating research plan",
-                completed_steps=0,
-                event_type="plan.created",
-                payload={"run_id": run.run_id, "steps": plan},
-            )
-            await self._pause(run.run_id)
-
-            retrieved_chunk = self._retrieve_top_chunk(run)
-            source = self._build_source(run, retrieved_chunk)
-            run = await self._advance(
-                run,
-                status="searching",
-                step_name="retrieving seed sources",
-                completed_steps=1,
-                event_type="source.retrieved",
-                payload=source.model_dump(mode="json"),
-            )
-            await self._pause(run.run_id)
-
-            run = await self._advance(
-                run,
-                status="reading",
-                step_name="reading retrieved material",
-                completed_steps=2,
-                event_type="source.read",
-                payload={
-                    "run_id": run.run_id,
-                    "source_id": source.source_id,
-                    "retrieval_mode": "local_text" if retrieved_chunk else "synthetic",
-                },
-            )
-            await self._pause(run.run_id)
-
-            evidence = self._build_evidence(run, source, retrieved_chunk)
-            claim = self._build_claim(run, evidence, retrieved_chunk)
-            run = await self._advance(
-                run,
-                status="extracting_evidence",
-                step_name="extracting evidence spans",
-                completed_steps=3,
-                event_type="evidence.extracted",
-                payload=evidence.model_dump(mode="json"),
-            )
-            await self._pause(run.run_id)
-
-            verification = self.citation_verifier.verify(
-                claim=claim,
-                evidence=evidence,
-                retrieved_chunk=retrieved_chunk,
-            )
-            run = await self._advance(
-                run,
-                status="verifying",
-                step_name="checking claim support",
-                completed_steps=4,
-                event_type="claim.verified",
-                payload=verification.model_dump(mode="json"),
-            )
-            await self._pause(run.run_id)
-
-            self._raise_if_cancelled(run.run_id)
-            self._write_evidence_artifacts(
-                run, source, evidence, claim, verification, retrieved_chunk
-            )
-            report = self.report_writer.write(
-                run=run,
-                source=source,
-                evidence=evidence,
-                claim=claim,
-                verification=verification,
-            )
-            self.artifact_store.write_text(run, "outputs/report.md", report.markdown)
-            self.artifact_store.write_json(run, "outputs/report.json", report.report_json)
-            self.artifact_store.write_text(
-                run,
-                "outputs/executive_summary.md",
-                report.executive_summary,
-            )
-            run = await self._advance(
-                run,
-                status="writing",
-                step_name="writing report artifacts",
-                completed_steps=5,
-                event_type="report.draft_created",
-                payload={"run_id": run.run_id, "path": "outputs/report.md"},
-            )
-            await self._pause(run.run_id)
-
-            self._raise_if_cancelled(run.run_id)
-            self.artifact_store.write_json(
-                run,
-                "evals/eval_result.json",
-                {
-                    "eval_run_id": f"eval_{run.run_id}",
-                    "case_id": "mvp_smoke",
-                    "research_run_id": run.run_id,
-                    "metrics": {
-                        "retrieval_recall": 1.0,
-                        "citation_precision": 1.0,
-                        "claim_support_rate": 1.0,
-                        "report_completeness": 1.0,
-                        "latency_sec": 0.0,
-                        "tool_success_rate": 1.0,
-                    },
-                    "verdict": "pass",
-                    "regression": False,
-                },
-            )
-            self.artifact_store.write_text(
-                run,
-                "evals/eval_report.md",
-                "# MVP Smoke Eval\n\nVerdict: pass\n",
-            )
-            run = await self._advance(
-                run,
-                status="reviewing",
-                step_name="reviewing completeness",
-                completed_steps=6,
-                event_type="review.completed",
-                payload={"run_id": run.run_id, "quality_score": 1.0},
-            )
-            await self._pause(run.run_id)
-
-            self._raise_if_cancelled(run.run_id)
-            run = self.run_store.update(
-                run.run_id,
+            self._raise_if_cancelled(state.run.run_id)
+            state.run = self.run_store.update(
+                state.run.run_id,
                 status="completed",
                 current_step="completed",
                 completed_steps=7,
                 finished=True,
             )
             self.event_store.append(
-                run,
+                state.run,
                 "report.completed",
-                {"run_id": run.run_id, "artifact_path": "outputs/report.md"},
+                {"run_id": state.run.run_id, "artifact_path": "outputs/report.md"},
             )
-            self.artifact_store.write_text(run, "logs/runtime.log", "MVP workflow completed.\n")
+            self.artifact_store.write_text(
+                state.run,
+                "logs/runtime.log",
+                "MVP node workflow completed.\n",
+            )
+            trace.append(
+                {
+                    "node": "completion",
+                    "status": "completed",
+                    "started_at": datetime.now(UTC).isoformat(),
+                    "finished_at": datetime.now(UTC).isoformat(),
+                    "duration_ms": 0,
+                    "event_type": "report.completed",
+                    "artifacts": ["logs/runtime.log"],
+                }
+            )
+            self._write_workflow_trace(state.run, trace)
         except WorkflowCancelled:
             return
         except Exception as exc:
             failed = self.run_store.update(
-                run.run_id,
+                state.run.run_id,
                 status="failed",
                 current_step="failed",
                 error=str(exc),
                 finished=True,
             )
-            self.event_store.append(failed, "run.failed", {"run_id": run.run_id, "error": str(exc)})
+            self.event_store.append(
+                failed,
+                "run.failed",
+                {"run_id": state.run.run_id, "error": str(exc)},
+            )
+            trace.append(
+                {
+                    "node": "failure",
+                    "status": "failed",
+                    "started_at": datetime.now(UTC).isoformat(),
+                    "finished_at": datetime.now(UTC).isoformat(),
+                    "duration_ms": 0,
+                    "event_type": "run.failed",
+                    "error": str(exc),
+                }
+            )
+            self._write_workflow_trace(failed, trace)
+
+    async def _execute_node(
+        self,
+        state: WorkflowState,
+        node: WorkflowNode,
+        trace: list[dict],
+    ) -> None:
+        self._raise_if_cancelled(state.run.run_id)
+        started_at = datetime.now(UTC)
+        start = perf_counter()
+        result = node.execute(state)
+        duration_ms = round((perf_counter() - start) * 1000, 2)
+        state.run = await self._advance(state.run, result=result)
+        trace.append(self._trace_entry(result, started_at, duration_ms))
+        self._write_workflow_trace(state.run, trace)
+        await self._pause(state.run.run_id)
+
+    def _build_nodes(self) -> list[WorkflowNode]:
+        return [
+            PlanningNode(self.research_planner, self.artifact_store),
+            RetrievalNode(self.retriever),
+            ReadingNode(),
+            EvidenceExtractionNode(),
+            VerificationNode(self.citation_verifier),
+            ReportWritingNode(self.artifact_store, self.report_writer),
+            EvaluationNode(self.artifact_store),
+        ]
 
     async def _advance(
         self,
         run: ResearchRun,
         *,
-        status: RunStatus,
-        step_name: str,
-        completed_steps: int,
-        event_type: str,
-        payload: dict,
+        result: NodeResult,
     ) -> ResearchRun:
         current = self.run_store.get(run.run_id)
         if current and current.status == "cancelled":
             return current
         updated = self.run_store.update(
             run.run_id,
-            status=status,
-            current_step=step_name,
-            completed_steps=completed_steps,
+            status=result.status,
+            current_step=result.step_name,
+            completed_steps=result.completed_steps,
         )
-        self.event_store.append(updated, event_type, payload)
+        self.event_store.append(updated, result.event_type, result.payload)
         return updated
 
     async def _pause(self, run_id: str) -> None:
@@ -237,141 +178,27 @@ class ResearchWorkflow:
         if current and current.status == "cancelled":
             raise WorkflowCancelled
 
-    def _retrieve_top_chunk(self, run: ResearchRun) -> RetrievedChunk | None:
-        chunks = self.retriever.retrieve(run.query, run.documents, limit=1)
-        return chunks[0] if chunks else None
-
-    def _build_source(self, run: ResearchRun, chunk: RetrievedChunk | None) -> Source:
-        if chunk is None:
-            return Source(
-                source_id="src_mvp_001",
-                run_id=run.run_id,
-                source_type="tool_result",
-                title="MVP synthetic source",
-                url=None,
-                retrieved_at=datetime.now(UTC),
-                credibility_score=0.5,
-                relevance_score=0.7,
-            )
-
-        return Source(
-            source_id=f"src_doc_{chunk.document_index + 1:03d}",
-            run_id=run.run_id,
-            source_type="file",
-            title=chunk.title,
-            url=chunk.url,
-            retrieved_at=datetime.now(UTC),
-            credibility_score=0.8,
-            relevance_score=chunk.score,
-        )
-
-    def _build_evidence(
+    def _trace_entry(
         self,
-        run: ResearchRun,
-        source: Source,
-        chunk: RetrievedChunk | None,
-    ) -> Evidence:
-        if chunk is None:
-            return Evidence(
-                evidence_id="ev_mvp_001",
-                source_id=source.source_id,
-                run_id=run.run_id,
-                text=(
-                    "The MVP runtime can create isolated research runs, stream events, "
-                    "and write run-scoped artifacts before real retrieval is connected."
-                ),
-                extraction_method="manual",
-                confidence=0.95,
-            )
+        result: NodeResult,
+        started_at: datetime,
+        duration_ms: float,
+    ) -> dict:
+        return {
+            "node": result.node_name,
+            "status": result.status,
+            "step_name": result.step_name,
+            "completed_steps": result.completed_steps,
+            "started_at": started_at.isoformat(),
+            "finished_at": datetime.now(UTC).isoformat(),
+            "duration_ms": duration_ms,
+            "event_type": result.event_type,
+            "artifacts": result.artifacts,
+        }
 
-        return Evidence(
-            evidence_id="ev_local_001",
-            source_id=source.source_id,
-            run_id=run.run_id,
-            text=chunk.text,
-            extraction_method="parser",
-            confidence=min(1.0, max(0.2, chunk.score)),
-        )
-
-    def _build_claim(
-        self,
-        run: ResearchRun,
-        evidence: Evidence,
-        chunk: RetrievedChunk | None,
-    ) -> Claim:
-        if chunk is None:
-            return Claim(
-                claim_id="claim_mvp_001",
-                run_id=run.run_id,
-                text="ResearchOS can first be validated through a deterministic local run loop.",
-                claim_type="analysis",
-                evidence_ids=[evidence.evidence_id],
-                confidence=0.86,
-                verification_status="supported",
-            )
-
-        return Claim(
-            claim_id="claim_local_001",
-            run_id=run.run_id,
-            text=f"The supplied local documents contain evidence relevant to: {run.query}",
-            claim_type="analysis",
-            evidence_ids=[evidence.evidence_id],
-            confidence=min(1.0, max(0.3, chunk.score)),
-            verification_status="supported",
-        )
-
-    def _write_evidence_artifacts(
-        self,
-        run: ResearchRun,
-        source: Source,
-        evidence: Evidence,
-        claim: Claim,
-        verification: CitationVerification,
-        retrieved_chunk: RetrievedChunk | None = None,
-    ) -> None:
-        self.artifact_store.write_json(
-            run, "evidence/sources.json", [source.model_dump(mode="json")]
-        )
-        self.artifact_store.write_json(
-            run, "evidence/evidence.json", [evidence.model_dump(mode="json")]
-        )
-        self.artifact_store.write_json(run, "evidence/claims.json", [claim.model_dump(mode="json")])
+    def _write_workflow_trace(self, run: ResearchRun, trace: list[dict]) -> None:
         self.artifact_store.write_json(
             run,
-            "evidence/citation_verification.json",
-            [verification.model_dump(mode="json")],
+            "traces/workflow_trace.json",
+            {"run_id": run.run_id, "nodes": trace},
         )
-        self.artifact_store.write_json(
-            run,
-            "evidence/evidence_graph.json",
-            {
-                "run_id": run.run_id,
-                "nodes": [
-                    {"id": source.source_id, "type": "source", "title": source.title},
-                    {"id": evidence.evidence_id, "type": "evidence", "text": evidence.text},
-                    {"id": claim.claim_id, "type": "claim", "text": claim.text},
-                ],
-                "edges": [
-                    {
-                        "from": evidence.evidence_id,
-                        "to": source.source_id,
-                        "type": "derived_from",
-                    },
-                    {"from": claim.claim_id, "to": evidence.evidence_id, "type": "supported_by"},
-                ],
-            },
-        )
-        if retrieved_chunk is not None:
-            self.artifact_store.write_json(
-                run,
-                "sources/parsed/retrieval_results.json",
-                [
-                    {
-                        "document_index": retrieved_chunk.document_index,
-                        "title": retrieved_chunk.title,
-                        "text": retrieved_chunk.text,
-                        "score": retrieved_chunk.score,
-                        "url": retrieved_chunk.url,
-                    }
-                ],
-            )
