@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from researchos.config import Settings
-from researchos.llm import LLMClient, MockLLMClient
+from researchos.llm import LLMClient, MockLLMClient, OpenAICompatibleLLMClient
 from researchos.models_router import ModelRouter
 from researchos.reporting import EvidenceReportWriter
 from researchos.retrieval.factory import build_retriever
@@ -30,7 +30,7 @@ def build_services(settings: Settings) -> AppServices:
     event_store = EventStore(workspace)
     artifact_store = ArtifactStore(workspace)
     model_router = ModelRouter(settings)
-    llm_client = MockLLMClient()
+    llm_client = build_llm_client(settings)
     workflow = ResearchWorkflow(
         run_store,
         event_store,
@@ -48,3 +48,12 @@ def build_services(settings: Settings) -> AppServices:
         llm_client=llm_client,
         workflow=workflow,
     )
+
+
+def build_llm_client(settings: Settings) -> LLMClient:
+    if settings.llm_client == "openai_compatible":
+        return OpenAICompatibleLLMClient(
+            api_key=settings.llm_api_key,
+            timeout_sec=settings.llm_timeout_sec,
+        )
+    return MockLLMClient()

@@ -23,6 +23,9 @@ class Settings:
     writer_base_url: str = ""
     verifier_model: str = ""
     verifier_base_url: str = ""
+    llm_client: str = "mock"
+    llm_api_key: str = ""
+    llm_timeout_sec: float = 30.0
 
 
 def get_settings() -> Settings:
@@ -45,4 +48,7 @@ def get_settings() -> Settings:
         writer_base_url=os.getenv("WRITER_BASE_URL", ""),
         verifier_model=os.getenv("VERIFIER_MODEL", ""),
         verifier_base_url=os.getenv("VERIFIER_BASE_URL", ""),
+        llm_client=os.getenv("RESEARCHOS_LLM_CLIENT", "mock"),
+        llm_api_key=os.getenv("RESEARCHOS_LLM_API_KEY", os.getenv("OPENAI_API_KEY", "")),
+        llm_timeout_sec=float(os.getenv("RESEARCHOS_LLM_TIMEOUT_SEC", "30")),
     )

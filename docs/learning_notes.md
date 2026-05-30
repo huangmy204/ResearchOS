@@ -35,8 +35,9 @@
 7. 测试与 Git 小步提交。
 8. RAG 检索、证据图、引用校验与评测。
 9. Model Router 与 LLM Client。
-10. LangGraph 工作流。
-11. Docker 沙箱与部署。
+10. 真实 LLM API 配置、密钥管理与错误处理。
+11. LangGraph 工作流。
+12. Docker 沙箱与部署。
 
 ## 文档目录
 

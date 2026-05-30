@@ -430,3 +430,46 @@ response.total_tokens
 ```
 
 当前 `response.dry_run = true`，表示这是模拟调用。后续接入真实 LLM 后，这个接口可以继续用来调试 prompt、模型选择和 token 统计。
+
+## 18. 手动测试真实 OpenAI-compatible LLM
+
+先在当前 PowerShell 窗口临时配置：
+
+```powershell
+$env:RESEARCHOS_LLM_CLIENT = "openai_compatible"
+$env:RESEARCHOS_LLM_API_KEY = "你的 API key"
+$env:WRITER_MODEL = "你的模型名"
+$env:WRITER_BASE_URL = "https://api.openai.com/v1"
+```
+
+启动服务：
+
+```powershell
+.\.venv\Scripts\python.exe -m researchos.api.main
+```
+
+另开一个 PowerShell 窗口请求：
+
+```powershell
+$completeBody = @{
+  role = "writer"
+  prompt = "Write a short report about citation risk."
+  temperature = 0
+  max_tokens = 256
+} | ConvertTo-Json
+
+Invoke-RestMethod `
+  -Method Post `
+  -Uri "http://localhost:8000/v1/models/complete" `
+  -ContentType "application/json" `
+  -Body $completeBody
+```
+
+如果配置正确，应该看到：
+
+```text
+response.dry_run = false
+response.content = 真实模型返回的文本
+```
+
+如果你没有配置 `RESEARCHOS_LLM_CLIENT=openai_compatible`，这个接口会继续走 mock client，`response.dry_run` 会是 `true`。

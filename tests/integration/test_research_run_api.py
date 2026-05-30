@@ -205,6 +205,39 @@ def test_model_dry_run_api_calls_mock_llm_client(tmp_path):
     assert body["response"]["total_tokens"] > 0
 
 
+def test_model_complete_api_uses_configured_llm_client(tmp_path):
+    app = create_app(
+        Settings(
+            env="test",
+            workspace_root=tmp_path / "workspace",
+            runtime_profile="test",
+            log_level="INFO",
+            api_host="127.0.0.1",
+            api_port=8000,
+            cors_allow_origins=[],
+            writer_model="writer-model",
+            writer_base_url="https://api.openai.com/v1",
+        )
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/models/complete",
+            json={
+                "role": "writer",
+                "prompt": "Write a short report.",
+                "temperature": 0.1,
+                "max_tokens": 64,
+            },
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["profile"]["role"] == "writer"
+    assert body["response"]["dry_run"] is True
+    assert body["response"]["content"].startswith("[mock:writer]")
+
+
 def test_research_run_uses_local_documents_for_evidence(tmp_path):
     app = create_app(
         Settings(

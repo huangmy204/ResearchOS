@@ -31,6 +31,18 @@ class LLMResponse(BaseModel):
     dry_run: bool = True
 
 
+class LLMClientError(Exception):
+    """Base error for model client failures."""
+
+
+class LLMConfigurationError(LLMClientError):
+    """Raised when the selected model client is missing required configuration."""
+
+
+class LLMProviderError(LLMClientError):
+    """Raised when the external model provider rejects or fails a request."""
+
+
 class LLMClient(Protocol):
     def complete(self, request: LLMRequest) -> LLMResponse:
         """Return a model completion for the request."""
