@@ -15,6 +15,14 @@ class Settings:
     api_port: int
     cors_allow_origins: list[str]
     retrieval_strategy: str = "keyword"
+    basic_model: str = ""
+    basic_base_url: str = ""
+    reasoning_model: str = ""
+    reasoning_base_url: str = ""
+    writer_model: str = ""
+    writer_base_url: str = ""
+    verifier_model: str = ""
+    verifier_base_url: str = ""
 
 
 def get_settings() -> Settings:
@@ -29,4 +37,12 @@ def get_settings() -> Settings:
         api_port=int(os.getenv("RESEARCHOS_API_PORT", "8000")),
         cors_allow_origins=[origin.strip() for origin in origins.split(",") if origin.strip()],
         retrieval_strategy=os.getenv("RESEARCHOS_RETRIEVAL_STRATEGY", "keyword"),
+        basic_model=os.getenv("BASIC_MODEL", ""),
+        basic_base_url=os.getenv("BASIC_BASE_URL", ""),
+        reasoning_model=os.getenv("REASONING_MODEL", ""),
+        reasoning_base_url=os.getenv("REASONING_BASE_URL", ""),
+        writer_model=os.getenv("WRITER_MODEL", ""),
+        writer_base_url=os.getenv("WRITER_BASE_URL", ""),
+        verifier_model=os.getenv("VERIFIER_MODEL", ""),
+        verifier_base_url=os.getenv("VERIFIER_BASE_URL", ""),
     )

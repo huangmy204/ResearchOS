@@ -364,3 +364,40 @@ results
 - tool_success_rate
 
 `latency_sec` 和 `estimated_cost` 会记录，但不会直接决定 pass/fail。
+
+## 16. 查看 Model Router 配置
+
+接口：
+
+```powershell
+Invoke-RestMethod "http://localhost:8000/v1/models"
+```
+
+默认情况下，如果没有配置模型，会看到：
+
+```text
+configured = false
+provider = unconfigured
+```
+
+你可以临时设置环境变量再启动服务：
+
+```powershell
+$env:BASIC_MODEL = "fast-model"
+$env:REASONING_MODEL = "reasoning-model"
+$env:WRITER_MODEL = "writer-model"
+$env:VERIFIER_MODEL = "verifier-model"
+.\.venv\Scripts\python.exe -m researchos.api.main
+```
+
+角色含义：
+
+```text
+basic     通用快速模型
+planner   规划模型
+searcher  检索相关模型，当前走 basic
+reader    阅读相关模型，当前走 basic
+writer    报告写作模型
+verifier  引用校验模型
+reviewer  评审模型，当前走 reasoning
+```

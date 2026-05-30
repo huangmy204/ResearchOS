@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from researchos.api.routes_artifacts import router as artifacts_router
 from researchos.api.routes_evidence import router as evidence_router
 from researchos.api.routes_health import router as health_router
+from researchos.api.routes_models import router as models_router
 from researchos.api.routes_runs import router as runs_router
 from researchos.api.services import build_services
 from researchos.config import Settings, get_settings
@@ -29,6 +30,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.include_router(health_router)
     app.include_router(runs_router)
+    app.include_router(models_router)
     app.include_router(evidence_router)
     app.include_router(artifacts_router)
     return app

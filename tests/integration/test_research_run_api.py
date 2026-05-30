@@ -146,6 +146,34 @@ def test_list_research_runs_and_event_history(tmp_path):
         assert "report.completed" in event_types
 
 
+def test_model_profiles_api_returns_role_configuration(tmp_path):
+    app = create_app(
+        Settings(
+            env="test",
+            workspace_root=tmp_path / "workspace",
+            runtime_profile="test",
+            log_level="INFO",
+            api_host="127.0.0.1",
+            api_port=8000,
+            cors_allow_origins=[],
+            basic_model="fast-model",
+            reasoning_model="reasoning-model",
+            writer_model="writer-model",
+            verifier_model="verifier-model",
+        )
+    )
+
+    with TestClient(app) as client:
+        response = client.get("/v1/models")
+
+    assert response.status_code == 200
+    profiles = {profile["role"]: profile for profile in response.json()["profiles"]}
+    assert profiles["searcher"]["model"] == "fast-model"
+    assert profiles["planner"]["model"] == "reasoning-model"
+    assert profiles["writer"]["model"] == "writer-model"
+    assert profiles["verifier"]["model"] == "verifier-model"
+
+
 def test_research_run_uses_local_documents_for_evidence(tmp_path):
     app = create_app(
         Settings(
