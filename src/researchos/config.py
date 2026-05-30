@@ -14,6 +14,7 @@ class Settings:
     api_host: str
     api_port: int
     cors_allow_origins: list[str]
+    retrieval_strategy: str = "keyword"
 
 
 def get_settings() -> Settings:
@@ -27,4 +28,5 @@ def get_settings() -> Settings:
         api_host=os.getenv("RESEARCHOS_API_HOST", "0.0.0.0"),
         api_port=int(os.getenv("RESEARCHOS_API_PORT", "8000")),
         cors_allow_origins=[origin.strip() for origin in origins.split(",") if origin.strip()],
+        retrieval_strategy=os.getenv("RESEARCHOS_RETRIEVAL_STRATEGY", "keyword"),
     )

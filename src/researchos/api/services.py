@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from researchos.config import Settings
+from researchos.reporting import EvidenceReportWriter
+from researchos.retrieval.factory import build_retriever
 from researchos.runtime import ResearchWorkflow
 from researchos.stores import ArtifactStore, EventStore, RunStore, Workspace
 
@@ -23,7 +25,13 @@ def build_services(settings: Settings) -> AppServices:
     run_store = RunStore(workspace)
     event_store = EventStore(workspace)
     artifact_store = ArtifactStore(workspace)
-    workflow = ResearchWorkflow(run_store, event_store, artifact_store)
+    workflow = ResearchWorkflow(
+        run_store,
+        event_store,
+        artifact_store,
+        retriever=build_retriever(settings.retrieval_strategy),
+        report_writer=EvidenceReportWriter(),
+    )
     return AppServices(
         settings=settings,
         workspace=workspace,

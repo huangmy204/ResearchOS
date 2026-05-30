@@ -260,6 +260,45 @@ Invoke-RestMethod "http://localhost:8000/v1/research-runs/$($ragRun.run_id)/arti
 
 你应该看到系统选择了 `Legal AI memo`，而不是 `Cooking note`。
 
+查看结构化报告 JSON：
+
+```powershell
+Invoke-RestMethod "http://localhost:8000/v1/research-runs/$($ragRun.run_id)/artifacts/content?path=outputs/report.json"
+```
+
+重点看：
+
+```text
+sources
+evidence
+claims
+citations
+limitations
+```
+
+### 切换 BM25 检索
+
+默认策略是：
+
+```text
+RESEARCHOS_RETRIEVAL_STRATEGY=keyword
+```
+
+如果想测试 BM25：
+
+```powershell
+$env:RESEARCHOS_RETRIEVAL_STRATEGY = "bm25"
+.\.venv\Scripts\python.exe -m researchos.api.main
+```
+
+再按上面的 RAG 请求创建 run。
+
+测试完可以清掉当前 PowerShell 会话里的环境变量：
+
+```powershell
+Remove-Item Env:RESEARCHOS_RETRIEVAL_STRATEGY
+```
+
 ## 14. 查看正式 Evidence API
 
 查看完整证据包：

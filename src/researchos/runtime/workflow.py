@@ -5,7 +5,8 @@ from datetime import UTC, datetime
 
 from researchos.models.evidence import CitationVerification, Claim, Evidence, Source
 from researchos.models.run import ResearchRun, RunStatus
-from researchos.retrieval import RetrievedChunk, retrieve_local_text
+from researchos.reporting import EvidenceReportWriter, ReportWriter
+from researchos.retrieval import LocalKeywordRetriever, RetrievedChunk, Retriever
 from researchos.stores.artifact_store import ArtifactStore
 from researchos.stores.event_store import EventStore
 from researchos.stores.run_store import RunStore
@@ -23,12 +24,16 @@ class ResearchWorkflow:
         run_store: RunStore,
         event_store: EventStore,
         artifact_store: ArtifactStore,
+        retriever: Retriever | None = None,
+        report_writer: ReportWriter | None = None,
         *,
         step_delay_sec: float = 0.05,
     ):
         self.run_store = run_store
         self.event_store = event_store
         self.artifact_store = artifact_store
+        self.retriever = retriever or LocalKeywordRetriever()
+        self.report_writer = report_writer or EvidenceReportWriter()
         self.step_delay_sec = step_delay_sec
 
     async def run(self, run_id: str) -> None:
@@ -123,22 +128,19 @@ class ResearchWorkflow:
             self._write_evidence_artifacts(
                 run, source, evidence, claim, verification, retrieved_chunk
             )
-            report = self._build_report(run, source, evidence, claim, verification)
-            self.artifact_store.write_text(run, "outputs/report.md", report)
-            self.artifact_store.write_json(
-                run,
-                "outputs/report.json",
-                {
-                    "run_id": run.run_id,
-                    "title": "ResearchOS MVP Run Report",
-                    "claims": [claim.model_dump(mode="json")],
-                    "citations": [verification.model_dump(mode="json")],
-                },
+            report = self.report_writer.write(
+                run=run,
+                source=source,
+                evidence=evidence,
+                claim=claim,
+                verification=verification,
             )
+            self.artifact_store.write_text(run, "outputs/report.md", report.markdown)
+            self.artifact_store.write_json(run, "outputs/report.json", report.report_json)
             self.artifact_store.write_text(
                 run,
                 "outputs/executive_summary.md",
-                self._build_executive_summary(retrieved_chunk),
+                report.executive_summary,
             )
             run = await self._advance(
                 run,
@@ -244,7 +246,7 @@ class ResearchWorkflow:
             raise WorkflowCancelled
 
     def _retrieve_top_chunk(self, run: ResearchRun) -> RetrievedChunk | None:
-        chunks = retrieve_local_text(run.query, run.documents, limit=1)
+        chunks = self.retriever.retrieve(run.query, run.documents, limit=1)
         return chunks[0] if chunks else None
 
     def _build_source(self, run: ResearchRun, chunk: RetrievedChunk | None) -> Source:
@@ -403,54 +405,3 @@ class ResearchWorkflow:
                     }
                 ],
             )
-
-    def _build_executive_summary(self, chunk: RetrievedChunk | None) -> str:
-        if chunk is None:
-            return "ResearchOS MVP completed a deterministic evidence-first run loop.\n"
-        return "ResearchOS retrieved local document evidence and generated a grounded report.\n"
-
-    def _build_report(
-        self,
-        run: ResearchRun,
-        source: Source,
-        evidence: Evidence,
-        claim: Claim,
-        verification: CitationVerification,
-    ) -> str:
-        summary = (
-            "This run used local text retrieval to select evidence before writing the report."
-            if source.source_type == "file"
-            else (
-                "This deterministic MVP validates the run lifecycle before real retrieval, "
-                "LLM reasoning, and LangGraph orchestration are connected."
-            )
-        )
-        return "\n".join(
-            [
-                "# ResearchOS MVP Run Report",
-                "",
-                f"Run ID: `{run.run_id}`",
-                f"Query: {run.query}",
-                "",
-                "## Summary",
-                "",
-                summary,
-                "",
-                "## Evidence",
-                "",
-                f"- Source: {source.title} (`{source.source_id}`)",
-                f"- Evidence: {evidence.text}",
-                "",
-                "## Claim Verification",
-                "",
-                f"- Claim: {claim.text}",
-                f"- Status: {verification.support_status}",
-                f"- Rationale: {verification.rationale}",
-                "",
-                "## Limitations",
-                "",
-                "This report uses synthetic MVP evidence. Real web retrieval and model-backed "
-                "verification will be added in later phases.",
-                "",
-            ]
-        )

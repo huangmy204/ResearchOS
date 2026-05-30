@@ -50,6 +50,7 @@ def test_research_run_lifecycle_creates_artifacts(tmp_path):
         )
         assert report.status_code == 200
         assert "ResearchOS MVP Run Report" in report.text
+        assert "Citation:" in report.text
 
 
 def test_artifact_api_rejects_escaping_paths(tmp_path):
@@ -199,11 +200,64 @@ def test_research_run_uses_local_documents_for_evidence(tmp_path):
             f"/v1/research-runs/{run_id}/artifacts/content",
             params={"path": "sources/parsed/retrieval_results.json"},
         ).json()
+        report_json = client.get(
+            f"/v1/research-runs/{run_id}/artifacts/content",
+            params={"path": "outputs/report.json"},
+        ).json()
 
         assert sources[0]["title"] == "Legal AI memo"
         assert sources[0]["source_type"] == "file"
         assert "hallucinated citations" in evidence[0]["text"]
         assert retrieval_results[0]["score"] > 0
+        assert report_json["sources"][0]["title"] == "Legal AI memo"
+        assert report_json["evidence"][0]["evidence_id"] == evidence[0]["evidence_id"]
+
+
+def test_research_run_can_use_bm25_retrieval_strategy(tmp_path):
+    app = create_app(
+        Settings(
+            env="test",
+            workspace_root=tmp_path / "workspace",
+            runtime_profile="test",
+            log_level="INFO",
+            api_host="127.0.0.1",
+            api_port=8000,
+            cors_allow_origins=[],
+            retrieval_strategy="bm25",
+        )
+    )
+    app.state.services.workflow.step_delay_sec = 0
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/research-runs",
+            json={
+                "session_id": "session",
+                "query": "legal citation risk",
+                "documents": [
+                    {
+                        "title": "General AI note",
+                        "text": "AI systems can support many knowledge work tasks.",
+                    },
+                    {
+                        "title": "Citation risk memo",
+                        "text": (
+                            "Legal citation risk requires citation verification. "
+                            "Unsupported citation references create legal research risk."
+                        ),
+                    },
+                ],
+            },
+        )
+        run_id = response.json()["run_id"]
+        _wait_for_run_completion(client, run_id)
+
+        sources = client.get(
+            f"/v1/research-runs/{run_id}/artifacts/content",
+            params={"path": "evidence/sources.json"},
+        ).json()
+
+        assert sources[0]["title"] == "Citation risk memo"
 
 
 def test_evidence_api_returns_bundle_and_graph(tmp_path):
