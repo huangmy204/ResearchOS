@@ -6,6 +6,9 @@ from fastapi.testclient import TestClient
 
 from researchos.api.main import create_app
 from researchos.config import Settings
+from researchos.llm import LLMResponse
+from researchos.models_router import ModelProfile
+from researchos.reporting import LLMReportWriter
 
 
 def test_research_run_lifecycle_creates_artifacts(tmp_path):
@@ -305,6 +308,61 @@ def test_research_run_uses_local_documents_for_evidence(tmp_path):
         assert report_json["evidence"][0]["evidence_id"] == evidence[0]["evidence_id"]
 
 
+def test_research_run_can_write_report_with_llm_writer(tmp_path):
+    app = create_app(
+        Settings(
+            env="test",
+            workspace_root=tmp_path / "workspace",
+            runtime_profile="test",
+            log_level="INFO",
+            api_host="127.0.0.1",
+            api_port=8000,
+            cors_allow_origins=[],
+        )
+    )
+    app.state.services.workflow.step_delay_sec = 0
+    app.state.services.workflow.report_writer = LLMReportWriter(
+        llm_client=_StaticWorkflowLLMClient(),
+        writer_profile=ModelProfile(
+            role="writer",
+            model="qwen-plus",
+            base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+            provider="openai_compatible",
+            configured=True,
+        ),
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/research-runs",
+            json={
+                "session_id": "session",
+                "query": "legal research citation risk",
+                "documents": [
+                    {
+                        "title": "Legal AI memo",
+                        "text": "Unsupported citations create legal research risk.",
+                    }
+                ],
+            },
+        )
+        run_id = response.json()["run_id"]
+        _wait_for_run_completion(client, run_id)
+
+        report = client.get(
+            f"/v1/research-runs/{run_id}/artifacts/content",
+            params={"path": "outputs/report.md"},
+        )
+        report_json = client.get(
+            f"/v1/research-runs/{run_id}/artifacts/content",
+            params={"path": "outputs/report.json"},
+        ).json()
+
+    assert "ResearchOS LLM Run Report" in report.text
+    assert report_json["generation"]["mode"] == "llm"
+    assert report_json["generation"]["dry_run"] is False
+
+
 def test_research_run_can_use_bm25_retrieval_strategy(tmp_path):
     app = create_app(
         Settings(
@@ -449,3 +507,26 @@ def _wait_for_run_completion(client: TestClient, run_id: str) -> dict:
             return run
         time.sleep(0.05)
     raise AssertionError("Run did not finish in time.")
+
+
+class _StaticWorkflowLLMClient:
+    def complete(self, request):
+        return LLMResponse(
+            content=(
+                "# ResearchOS LLM Run Report\n\n"
+                "## Summary\n\n"
+                "The selected evidence supports the report.\n\n"
+                "## Evidence\n\n"
+                "Citation: `src_doc_001:ev_local_001`\n\n"
+                "## Claim Verification\n\n"
+                "The claim is supported.\n\n"
+                "## Limitations\n\n"
+                "Only one local evidence chunk was used."
+            ),
+            model=request.profile.model,
+            provider=request.profile.provider,
+            prompt_tokens=10,
+            completion_tokens=20,
+            total_tokens=30,
+            dry_run=False,
+        )

@@ -1,3 +1,8 @@
-from researchos.reporting.writer import EvidenceReportWriter, ReportDraft, ReportWriter
+from researchos.reporting.writer import (
+    EvidenceReportWriter,
+    LLMReportWriter,
+    ReportDraft,
+    ReportWriter,
+)
 
-__all__ = ["EvidenceReportWriter", "ReportDraft", "ReportWriter"]
+__all__ = ["EvidenceReportWriter", "LLMReportWriter", "ReportDraft", "ReportWriter"]

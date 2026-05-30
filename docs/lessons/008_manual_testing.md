@@ -473,3 +473,60 @@ response.content = 真实模型返回的文本
 ```
 
 如果你没有配置 `RESEARCHOS_LLM_CLIENT=openai_compatible`，这个接口会继续走 mock client，`response.dry_run` 会是 `true`。
+
+## 19. 手动测试 LLM Report Writer
+
+在 `.env` 已经配置好阿里云百炼后，启动服务：
+
+```powershell
+.\.venv\Scripts\python.exe -m researchos.api.main
+```
+
+创建一个带本地文档的 research run：
+
+```powershell
+$llmRunBody = @{
+  session_id = "manual-llm-writer"
+  query = "legal research citation risk"
+  documents = @(
+    @{
+      title = "Legal AI memo"
+      text = "Unsupported citations create legal research risk. Legal research assistants need citation verification."
+    }
+  )
+} | ConvertTo-Json -Depth 5
+
+$llmRun = Invoke-RestMethod `
+  -Method Post `
+  -Uri "http://localhost:8000/v1/research-runs" `
+  -ContentType "application/json" `
+  -Body $llmRunBody
+```
+
+等待几秒后查看报告：
+
+```powershell
+Invoke-RestMethod "http://localhost:8000/v1/research-runs/$($llmRun.run_id)/artifacts/content?path=outputs/report.md"
+```
+
+查看结构化报告：
+
+```powershell
+Invoke-RestMethod "http://localhost:8000/v1/research-runs/$($llmRun.run_id)/artifacts/content?path=outputs/report.json"
+```
+
+重点看：
+
+```text
+generation.mode
+generation.model
+generation.dry_run
+generation.total_tokens
+```
+
+如果真实 LLM 成功参与报告生成，应看到：
+
+```text
+generation.mode = llm
+generation.dry_run = false
+```

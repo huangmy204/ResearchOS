@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from researchos.config import Settings
 from researchos.llm import LLMClient, MockLLMClient, OpenAICompatibleLLMClient
 from researchos.models_router import ModelRouter
-from researchos.reporting import EvidenceReportWriter
+from researchos.reporting import EvidenceReportWriter, LLMReportWriter, ReportWriter
 from researchos.retrieval.factory import build_retriever
 from researchos.runtime import ResearchWorkflow
 from researchos.stores import ArtifactStore, EventStore, RunStore, Workspace
@@ -31,12 +31,13 @@ def build_services(settings: Settings) -> AppServices:
     artifact_store = ArtifactStore(workspace)
     model_router = ModelRouter(settings)
     llm_client = build_llm_client(settings)
+    report_writer = build_report_writer(settings, model_router, llm_client)
     workflow = ResearchWorkflow(
         run_store,
         event_store,
         artifact_store,
         retriever=build_retriever(settings.retrieval_strategy),
-        report_writer=EvidenceReportWriter(),
+        report_writer=report_writer,
     )
     return AppServices(
         settings=settings,
@@ -57,3 +58,18 @@ def build_llm_client(settings: Settings) -> LLMClient:
             timeout_sec=settings.llm_timeout_sec,
         )
     return MockLLMClient()
+
+
+def build_report_writer(
+    settings: Settings,
+    model_router: ModelRouter,
+    llm_client: LLMClient,
+) -> ReportWriter:
+    fallback_writer = EvidenceReportWriter()
+    if settings.llm_client == "openai_compatible":
+        return LLMReportWriter(
+            llm_client=llm_client,
+            writer_profile=model_router.select("writer"),
+            fallback_writer=fallback_writer,
+        )
+    return fallback_writer
