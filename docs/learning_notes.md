@@ -33,8 +33,10 @@
 5. SSE 事件流。
 6. Artifact API 与路径安全。
 7. 测试与 Git 小步提交。
-8. LangGraph 工作流。
-9. 搜索、证据图、引用校验、评测和 Docker 沙箱。
+8. RAG 检索、证据图、引用校验与评测。
+9. Model Router 与 LLM Client。
+10. LangGraph 工作流。
+11. Docker 沙箱与部署。
 
 ## 文档目录
 

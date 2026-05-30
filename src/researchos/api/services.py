@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from researchos.config import Settings
+from researchos.llm import LLMClient, MockLLMClient
 from researchos.models_router import ModelRouter
 from researchos.reporting import EvidenceReportWriter
 from researchos.retrieval.factory import build_retriever
@@ -18,6 +19,7 @@ class AppServices:
     event_store: EventStore
     artifact_store: ArtifactStore
     model_router: ModelRouter
+    llm_client: LLMClient
     workflow: ResearchWorkflow
 
 
@@ -28,6 +30,7 @@ def build_services(settings: Settings) -> AppServices:
     event_store = EventStore(workspace)
     artifact_store = ArtifactStore(workspace)
     model_router = ModelRouter(settings)
+    llm_client = MockLLMClient()
     workflow = ResearchWorkflow(
         run_store,
         event_store,
@@ -42,5 +45,6 @@ def build_services(settings: Settings) -> AppServices:
         event_store=event_store,
         artifact_store=artifact_store,
         model_router=model_router,
+        llm_client=llm_client,
         workflow=workflow,
     )

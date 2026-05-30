@@ -174,6 +174,37 @@ def test_model_profiles_api_returns_role_configuration(tmp_path):
     assert profiles["verifier"]["model"] == "verifier-model"
 
 
+def test_model_dry_run_api_calls_mock_llm_client(tmp_path):
+    app = create_app(
+        Settings(
+            env="test",
+            workspace_root=tmp_path / "workspace",
+            runtime_profile="test",
+            log_level="INFO",
+            api_host="127.0.0.1",
+            api_port=8000,
+            cors_allow_origins=[],
+            writer_model="writer-model",
+            writer_base_url="https://api.openai.com/v1",
+        )
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/models/dry-run",
+            json={"role": "writer", "prompt": "Write a short report."},
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["profile"]["role"] == "writer"
+    assert body["profile"]["model"] == "writer-model"
+    assert body["profile"]["provider"] == "openai"
+    assert body["response"]["dry_run"] is True
+    assert body["response"]["content"].startswith("[mock:writer]")
+    assert body["response"]["total_tokens"] > 0
+
+
 def test_research_run_uses_local_documents_for_evidence(tmp_path):
     app = create_app(
         Settings(

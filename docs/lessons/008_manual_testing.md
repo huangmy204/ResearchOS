@@ -401,3 +401,32 @@ writer    报告写作模型
 verifier  引用校验模型
 reviewer  评审模型，当前走 reasoning
 ```
+
+## 17. 手动测试 Mock LLM Client
+
+这个接口用于验证“模型路由 -> LLM Client -> 响应结构”的链路，但不会真的调用外部大模型。
+
+```powershell
+$llmBody = @{
+  role = "writer"
+  prompt = "Write a short report about citation risk."
+} | ConvertTo-Json
+
+Invoke-RestMethod `
+  -Method Post `
+  -Uri "http://localhost:8000/v1/models/dry-run" `
+  -ContentType "application/json" `
+  -Body $llmBody
+```
+
+重点看这些字段：
+
+```text
+profile.role
+profile.model
+response.content
+response.dry_run
+response.total_tokens
+```
+
+当前 `response.dry_run = true`，表示这是模拟调用。后续接入真实 LLM 后，这个接口可以继续用来调试 prompt、模型选择和 token 统计。
