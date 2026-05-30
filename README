@@ -1,0 +1,1552 @@
+# ResearchOS: EvidenceGraph Deep Research Agent
+
+> An evidence-first, run-oriented Deep Research Agent runtime for complex information analysis.
+
+ResearchOS 是一个面向复杂信息分析任务的 Deep Research Agent 系统。它不是简单的 RAG 问答 Demo，而是一个支持长任务运行、任务规划、多轮检索、证据图构建、引用校验、报告生成、artifact 管理、Docker 隔离执行和自动评测的多智能体研究平台。
+
+项目目标是构建一个可追踪、可恢复、可评测、可部署的 Agent Runtime，使系统能够处理科研、金融、法律、商业分析、竞品研究等复杂研究任务，并输出带有证据链和引用校验结果的结构化研究报告。
+
+---
+
+## 1. Project Status
+
+当前项目处于规划与构建阶段。
+
+本 README 既是项目说明，也是 Codex / AI Coding Agent 的实现规格书。实现时请优先完成 P0 MVP，再逐步扩展 P1 / P2 能力。
+
+### MVP Priority
+
+P0 必须实现：
+
+- FastAPI Research Run API
+- LangGraph 多阶段 Agent Workflow
+- SSE Event Streaming
+- Workspace / Run 目录隔离
+- Artifact 管理
+- Evidence Graph 基础结构
+- Citation Verification 基础版
+- Docker runtime + sandbox 基础版
+- Evaluation Harness 基础版
+
+P1 建议实现：
+
+- RunStore / EventStore / ArtifactStore
+- Postgres / Redis 持久化
+- MCP Gateway
+- Multi-model Router
+- Metrics endpoint
+- Regression eval dataset
+
+P2 加分项：
+
+- GraphRAG
+- Evidence Graph 前端可视化
+- Trace Viewer
+- Redis Stream
+- Report Editor
+- Team Workspace
+- Benchmark Dashboard
+
+---
+
+## 2. Problem Statement
+
+普通 RAG 系统通常只能完成局部问答，难以处理真实工作中的复杂研究任务：
+
+1. 任务周期长，需要规划、搜索、阅读、分析、验证和写作。
+2. 信息来源多，包括网页、PDF、报告、数据库、用户上传文档和代码执行结果。
+3. 结论需要证据支撑，而不是只生成看似合理的自然语言。
+4. 引用需要可验证，不能只附一个来源链接。
+5. 研究过程需要可追踪、可回放、可审计。
+6. 系统需要支持失败恢复、任务取消、artifact 下载和自动评测。
+
+ResearchOS 的核心目标是将 Deep Research 从“聊天式回答”升级为“可运行的研究工作流”。
+
+---
+
+## 3. Core Ideas
+
+### 3.1 Evidence-first
+
+系统不直接生成最终报告，而是先构建 Evidence Graph。
+
+核心对象：
+
+- `Claim`: 报告中的结论或判断。
+- `Evidence`: 支撑 Claim 的原文片段、数据或分析结果。
+- `Source`: 网页、PDF、文件、数据库记录或工具结果。
+- `Citation`: Claim 与 Evidence / Source 之间的引用关系。
+- `Verification`: 判断 Evidence 是否真正支持 Claim。
+
+### 3.2 Run-oriented
+
+每一次研究任务都是一个独立的 `research_run`。
+
+一个 run 需要支持：
+
+- 创建
+- 查询状态
+- SSE 订阅事件
+- 取消
+- 恢复
+- 查看 evidence
+- 下载 artifacts
+- 查看最终 report
+- 查看 trace 和评测结果
+
+### 3.3 Durable Agent Runtime
+
+系统使用 LangGraph 构建显式状态机，而不是简单 ReAct loop。
+
+每个节点必须有清晰的输入输出结构：
+
+- Planner Agent
+- Search Agent
+- Reader Agent
+- Evidence Agent
+- Verifier Agent
+- Writer Agent
+- Reviewer Agent
+
+### 3.4 Tool Gateway
+
+外部能力统一通过 Tool Gateway / MCP Gateway 接入：
+
+- Search Tool
+- Browser Tool
+- PDF Parser
+- Code Sandbox
+- Database Connector
+- Cloud Storage Connector
+- Local File Reader
+
+### 3.5 Evaluation Harness
+
+系统必须有自动评测闭环，不能只靠人工看最终报告。
+
+评测指标包括：
+
+- Retrieval Recall
+- Citation Precision
+- Claim Support Rate
+- Source Diversity
+- Conflict Detection Score
+- Report Completeness
+- Latency
+- Cost
+- Tool Success Rate
+- Regression Stability
+
+---
+
+## 4. Architecture
+
+```text
+ResearchOS / EvidenceGraph Deep Research Agent
+
+1. API Control Plane
+   ├── FastAPI
+   ├── Research Run API
+   ├── SSE Event Stream
+   ├── Artifact API
+   ├── Cancel / Resume
+   ├── Health / Ready / Metrics
+   └── Auth / Tenant Isolation, optional for MVP
+
+2. Agent Runtime
+   ├── LangGraph StateGraph
+   ├── Planner Agent
+   ├── Search Agent
+   ├── Reader Agent
+   ├── Evidence Agent
+   ├── Verifier Agent
+   ├── Writer Agent
+   └── Reviewer Agent
+
+3. Retrieval & Evidence Layer
+   ├── Hybrid Search
+   ├── Web RAG
+   ├── Vector DB
+   ├── Reranker
+   ├── Evidence Store
+   ├── Citation Verification
+   └── GraphRAG, optional for P2
+
+4. Tool Gateway
+   ├── MCP Gateway
+   ├── Search Tool
+   ├── Browser Tool
+   ├── PDF Parser
+   ├── Code Sandbox
+   ├── Database Connector
+   └── Cloud Storage Connector
+
+5. Runtime Infrastructure
+   ├── Docker Runtime Container
+   ├── Docker Sandbox Container
+   ├── Redis
+   ├── Postgres
+   ├── Vector DB
+   ├── Object Storage / Local Artifact Store
+   └── Runtime Profiles: developer / deploy / eval / safe-mode
+
+6. AgentOps & Evaluation
+   ├── RunStore
+   ├── EventStore
+   ├── ArtifactStore
+   ├── Trace Logs
+   ├── Evaluation Harness
+   ├── Regression Dataset
+   └── Benchmark Reports
+
+7. Frontend Workspace
+   ├── React Research Workspace
+   ├── Research Timeline
+   ├── Evidence Graph Viewer
+   ├── Citation Inspector
+   ├── Report Viewer
+   ├── Report Editor, optional
+   └── Artifact Download
+```
+
+---
+
+## 5. Research Run Lifecycle
+
+```text
+1. User submits research task
+2. API creates research_run
+3. Planner Agent generates research plan
+4. Search Agent performs multi-round retrieval
+5. Reader Agent parses web pages, PDFs, files, and source snapshots
+6. Evidence Agent extracts claims, evidence spans, entities, and source metadata
+7. Verifier Agent checks whether evidence supports each claim
+8. Writer Agent generates structured report
+9. Reviewer Agent checks missing evidence, weak citations, conflicts, and quality issues
+10. System exports artifacts and final report
+11. Evaluation Harness optionally scores the run
+```
+
+---
+
+## 6. Agent Design
+
+### 6.1 Planner Agent
+
+Responsibilities:
+
+- Understand research goal.
+- Break task into subquestions.
+- Generate research plan.
+- Decide which tools and sources are needed.
+- Define success criteria.
+- Trigger human approval if the task is high risk.
+
+Input:
+
+```json
+{
+  "task": "Analyze the market opportunity for AI-powered clinical research assistants.",
+  "domain": "market_research",
+  "depth": "deep",
+  "output_format": "long_report"
+}
+```
+
+Output:
+
+```json
+{
+  "research_plan": [
+    {
+      "step_id": "step_001",
+      "goal": "Clarify market scope and target users",
+      "agent": "searcher",
+      "expected_output": "source list and key facts"
+    }
+  ],
+  "success_criteria": [
+    "At least 8 credible sources",
+    "Every major claim must have evidence",
+    "Conflicts must be explicitly marked"
+  ]
+}
+```
+
+### 6.2 Search Agent
+
+Responsibilities:
+
+- Generate search queries.
+- Perform multi-source retrieval.
+- Rewrite queries when results are weak.
+- Deduplicate sources.
+- Rank sources by credibility and relevance.
+
+Search strategies:
+
+- Keyword search
+- Query rewriting
+- Multi-hop search
+- Source expansion
+- Domain-specific search
+- Freshness-aware search
+
+### 6.3 Reader Agent
+
+Responsibilities:
+
+- Parse webpages.
+- Parse PDFs.
+- Parse uploaded documents.
+- Extract clean text.
+- Preserve source metadata.
+- Save source snapshots.
+
+### 6.4 Evidence Agent
+
+Responsibilities:
+
+- Extract evidence spans.
+- Link evidence to sources.
+- Generate candidate claims.
+- Detect entities and relationships.
+- Build Evidence Graph.
+
+### 6.5 Verifier Agent
+
+Responsibilities:
+
+- Check claim-evidence alignment.
+- Label support status.
+- Detect unsupported claims.
+- Detect contradictory evidence.
+- Downgrade confidence when evidence is weak.
+
+Support labels:
+
+```text
+supported
+partially_supported
+unsupported
+contradicted
+not_enough_information
+```
+
+### 6.6 Writer Agent
+
+Responsibilities:
+
+- Generate final report.
+- Include citations.
+- Separate facts, analysis, and assumptions.
+- Mark confidence levels.
+- Include limitations.
+
+### 6.7 Reviewer Agent
+
+Responsibilities:
+
+- Check report completeness.
+- Identify missing citations.
+- Identify weak or unsupported claims.
+- Request additional retrieval if needed.
+- Produce final quality score.
+
+---
+
+## 7. Data Models
+
+Use Pydantic models for all structured inputs and outputs.
+
+### 7.1 ResearchRun
+
+```python
+from typing import Literal, Optional
+from pydantic import BaseModel, Field
+from datetime import datetime
+
+class ResearchRun(BaseModel):
+    run_id: str
+    tenant_id: str = "default"
+    user_id: str = "default"
+    session_id: str
+    request_id: Optional[str] = None
+    status: Literal[
+        "created",
+        "planning",
+        "searching",
+        "reading",
+        "extracting_evidence",
+        "verifying",
+        "writing",
+        "reviewing",
+        "completed",
+        "failed",
+        "cancelled"
+    ]
+    query: str
+    created_at: datetime
+    updated_at: datetime
+    finished_at: Optional[datetime] = None
+    error: Optional[str] = None
+```
+
+### 7.2 Source
+
+```python
+class Source(BaseModel):
+    source_id: str
+    run_id: str
+    source_type: Literal["web", "pdf", "file", "database", "tool_result"]
+    title: str
+    url: Optional[str] = None
+    local_path: Optional[str] = None
+    author: Optional[str] = None
+    published_at: Optional[str] = None
+    retrieved_at: datetime
+    credibility_score: Optional[float] = None
+    relevance_score: Optional[float] = None
+```
+
+### 7.3 Evidence
+
+```python
+class Evidence(BaseModel):
+    evidence_id: str
+    source_id: str
+    run_id: str
+    text: str
+    start_offset: Optional[int] = None
+    end_offset: Optional[int] = None
+    page_number: Optional[int] = None
+    section_title: Optional[str] = None
+    extraction_method: Literal["llm", "regex", "parser", "manual"]
+    confidence: float = Field(ge=0.0, le=1.0)
+```
+
+### 7.4 Claim
+
+```python
+class Claim(BaseModel):
+    claim_id: str
+    run_id: str
+    text: str
+    claim_type: Literal["fact", "analysis", "prediction", "recommendation", "risk"]
+    evidence_ids: list[str] = []
+    confidence: float = Field(ge=0.0, le=1.0)
+    verification_status: Literal[
+        "supported",
+        "partially_supported",
+        "unsupported",
+        "contradicted",
+        "not_enough_information"
+    ] = "not_enough_information"
+```
+
+### 7.5 CitationVerification
+
+```python
+class CitationVerification(BaseModel):
+    verification_id: str
+    claim_id: str
+    evidence_id: str
+    support_status: Literal[
+        "supported",
+        "partially_supported",
+        "unsupported",
+        "contradicted",
+        "not_enough_information"
+    ]
+    rationale: str
+    confidence: float = Field(ge=0.0, le=1.0)
+```
+
+### 7.6 ResearchEvent
+
+```python
+class ResearchEvent(BaseModel):
+    event_id: str
+    run_id: str
+    sequence: int
+    event_type: str
+    payload: dict
+    created_at: datetime
+```
+
+---
+
+## 8. API Design
+
+All new integrations should use `/v1/*`.
+
+### 8.1 Create Research Run
+
+```http
+POST /v1/research-runs
+```
+
+Request:
+
+```json
+{
+  "tenant_id": "tenant-a",
+  "user_id": "user-b",
+  "session_id": "session-001",
+  "request_id": "req-001",
+  "query": "Analyze whether AI research agents can reduce due diligence time in venture capital.",
+  "options": {
+    "depth": "deep",
+    "auto_accepted_plan": true,
+    "enable_web_search": true,
+    "enable_code_sandbox": false,
+    "enable_citation_verification": true,
+    "enable_eval": true
+  },
+  "models": {
+    "planner": "reasoning-model",
+    "searcher": "fast-model",
+    "verifier": "accurate-model",
+    "writer": "long-context-model"
+  }
+}
+```
+
+Response:
+
+```json
+{
+  "run_id": "run_001",
+  "status": "created",
+  "events_url": "/v1/research-runs/run_001/events",
+  "artifacts_url": "/v1/research-runs/run_001/artifacts"
+}
+```
+
+### 8.2 Get Run Status
+
+```http
+GET /v1/research-runs/{run_id}
+```
+
+Response:
+
+```json
+{
+  "run_id": "run_001",
+  "status": "searching",
+  "current_step": "retrieving sources",
+  "progress": {
+    "completed_steps": 2,
+    "total_steps": 7
+  }
+}
+```
+
+### 8.3 Stream Run Events
+
+```http
+GET /v1/research-runs/{run_id}/events
+```
+
+Use Server-Sent Events.
+
+Example events:
+
+```text
+event: plan.created
+data: {"run_id":"run_001","steps":[...]}
+
+event: source.retrieved
+data: {"source_id":"src_001","title":"...","relevance_score":0.86}
+
+event: evidence.extracted
+data: {"evidence_id":"ev_001","source_id":"src_001"}
+
+event: claim.verified
+data: {"claim_id":"claim_001","status":"supported"}
+
+event: report.completed
+data: {"artifact_path":"outputs/report.md"}
+```
+
+### 8.4 Cancel Run
+
+```http
+POST /v1/research-runs/{run_id}/cancel
+```
+
+### 8.5 List Artifacts
+
+```http
+GET /v1/research-runs/{run_id}/artifacts
+```
+
+Response:
+
+```json
+{
+  "artifacts": [
+    {
+      "path": "outputs/report.md",
+      "type": "report",
+      "content_url": "/v1/research-runs/run_001/artifacts/content?path=outputs/report.md"
+    },
+    {
+      "path": "evidence/evidence_graph.json",
+      "type": "evidence_graph",
+      "content_url": "/v1/research-runs/run_001/artifacts/content?path=evidence/evidence_graph.json"
+    }
+  ]
+}
+```
+
+### 8.6 Download Artifact Content
+
+```http
+GET /v1/research-runs/{run_id}/artifacts/content?path=outputs/report.md
+```
+
+### 8.7 Health / Readiness / Metrics
+
+```http
+GET /healthz
+GET /readyz
+GET /metricsz
+```
+
+`/readyz` should check:
+
+- workspace root writable
+- Postgres available, if enabled
+- Redis available, if enabled
+- vector database available, if enabled
+- Docker sandbox available, if enabled
+- search provider available, if enabled
+- MCP Gateway available, if enabled
+
+`/metricsz` should include:
+
+```json
+{
+  "total_runs": 10,
+  "running_runs": 1,
+  "completed_runs": 7,
+  "failed_runs": 2,
+  "avg_latency_sec": 120.5,
+  "avg_claim_support_rate": 0.81,
+  "avg_citation_precision": 0.76,
+  "tool_success_rate": 0.93
+}
+```
+
+---
+
+## 9. Workspace Layout
+
+Formal runs should use a stable workspace layout.
+
+```text
+workspace/
+  tenants/
+    <tenant_id>/
+      users/
+        <user_id>/
+          sessions/
+            <session_id>/
+              memory/
+                context_store/
+                structured/
+              runs/
+                <run_id>/
+                  inputs/
+                    uploaded_files/
+                    urls.json
+                    task.json
+                  sources/
+                    web_pages/
+                    pdfs/
+                    snapshots/
+                    parsed/
+                  evidence/
+                    claims.json
+                    evidence.json
+                    sources.json
+                    evidence_graph.json
+                    citations.json
+                    citation_verification.json
+                  outputs/
+                    report.md
+                    report.json
+                    executive_summary.md
+                    report.pdf
+                  traces/
+                    events.jsonl
+                    tool_calls.jsonl
+                    model_calls.jsonl
+                    state_snapshots.jsonl
+                  evals/
+                    eval_result.json
+                    eval_report.md
+                  logs/
+                    runtime.log
+```
+
+Rules:
+
+1. Each run must have isolated inputs, outputs, evidence, traces, evals, and logs.
+2. Do not store run-specific artifacts in global directories.
+3. Artifact API must return stable logical paths.
+4. Internal absolute paths should not be exposed to the frontend.
+5. User-uploaded files must only be accessed through allowed workspace roots.
+6. Sandbox execution must not read or write outside the run workspace.
+
+---
+
+## 10. Docker Design
+
+ResearchOS should use two container layers.
+
+### 10.1 Runtime Container
+
+The runtime container runs the main agent workflow.
+
+Responsibilities:
+
+- FastAPI API server
+- LangGraph workflow execution
+- Run lifecycle management
+- Event streaming bridge
+- Artifact indexing
+- Evaluation Harness
+- Tool Gateway client
+
+Image:
+
+```text
+docker/runtime/Dockerfile
+```
+
+### 10.2 Sandbox Container
+
+The sandbox container executes higher-risk tool operations.
+
+Responsibilities:
+
+- Python code execution
+- PDF parsing
+- File inspection
+- Data analysis
+- Chart generation
+- Optional browser automation
+- Restricted filesystem access
+
+Image:
+
+```text
+docker/sandbox/Dockerfile
+```
+
+Security requirements:
+
+- Set execution timeout.
+- Limit memory and CPU.
+- Mount only run-scoped directories.
+- Do not mount host root.
+- Use read-only mounts where possible.
+- Disable network for code execution unless explicitly required.
+- Log every execution command and output.
+- Store generated files under `outputs/`.
+
+---
+
+## 11. Docker Compose
+
+Use Docker Compose for local development.
+
+```text
+docker/
+  runtime/
+    Dockerfile
+  sandbox/
+    Dockerfile
+  compose/
+    docker-compose.dev.yml
+    docker-compose.eval.yml
+    docker-compose.prod.yml
+```
+
+Recommended services:
+
+```yaml
+services:
+  research-api:
+    build:
+      context: ../..
+      dockerfile: docker/runtime/Dockerfile
+    ports:
+      - "8000:8000"
+    env_file:
+      - ../../.env
+    volumes:
+      - ../../workspace:/app/workspace
+    depends_on:
+      - postgres
+      - redis
+      - vector-db
+
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: researchos
+      POSTGRES_PASSWORD: researchos
+      POSTGRES_DB: researchos
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+
+  vector-db:
+    image: qdrant/qdrant:latest
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrant_data:/qdrant/storage
+
+volumes:
+  postgres_data:
+  qdrant_data:
+```
+
+---
+
+## 12. Runtime Profiles
+
+Support multiple runtime profiles.
+
+```text
+RESEARCH_RUNTIME_PROFILE=developer
+RESEARCH_RUNTIME_PROFILE=deploy
+RESEARCH_RUNTIME_PROFILE=eval
+RESEARCH_RUNTIME_PROFILE=safe-mode
+```
+
+| Profile | Purpose | Behavior |
+|---|---|---|
+| developer | Local development | Mount local repo, verbose logs, hot reload |
+| deploy | Production-like deployment | Use image-bundled code, stable runtime |
+| eval | Evaluation and benchmark | Fixed prompts, fixed models, fixed datasets |
+| safe-mode | High-risk tasks | Disable write tools and external code execution |
+
+---
+
+## 13. Configuration
+
+Start from:
+
+```bash
+cp .env.example .env
+```
+
+Important variables:
+
+```env
+# App
+RESEARCHOS_ENV=development
+RESEARCHOS_WORKSPACE_ROOT=workspace
+RESEARCHOS_RUNTIME_PROFILE=developer
+RESEARCHOS_LOG_LEVEL=INFO
+
+# API
+RESEARCHOS_API_HOST=0.0.0.0
+RESEARCHOS_API_PORT=8000
+RESEARCHOS_CORS_ALLOW_ORIGINS=http://localhost:3000
+
+# Storage
+RESEARCHOS_POSTGRES_URL=postgresql://researchos:researchos@localhost:5432/researchos
+RESEARCHOS_REDIS_URL=redis://localhost:6379/0
+RESEARCHOS_VECTOR_DB_URL=http://localhost:6333
+
+# Models
+BASIC_MODEL=
+BASIC_BASE_URL=
+BASIC_API_KEY=
+
+REASONING_MODEL=
+REASONING_BASE_URL=
+REASONING_API_KEY=
+
+WRITER_MODEL=
+WRITER_BASE_URL=
+WRITER_API_KEY=
+
+VERIFIER_MODEL=
+VERIFIER_BASE_URL=
+VERIFIER_API_KEY=
+
+EMBEDDING_MODEL=
+EMBEDDING_BASE_URL=
+EMBEDDING_API_KEY=
+EMBEDDING_DIM=1024
+
+# Search
+SEARCH_PROVIDER=searxng
+SEARXNG_BASE_URL=http://localhost:8080
+TAVILY_API_KEY=
+JINA_API_KEY=
+
+# Docker
+RESEARCHOS_ENABLE_DOCKER=true
+RESEARCHOS_SANDBOX_IMAGE=researchos-sandbox:latest
+RESEARCHOS_RUNTIME_IMAGE=researchos-runtime:latest
+RESEARCHOS_SANDBOX_TIMEOUT_SEC=120
+RESEARCHOS_SANDBOX_MEMORY_LIMIT=2g
+RESEARCHOS_SANDBOX_CPU_LIMIT=2
+
+# MCP
+RESEARCHOS_ENABLE_MCP=false
+MCP_GATEWAY_URL=
+
+# Evaluation
+RESEARCHOS_ENABLE_EVAL=true
+RESEARCHOS_EVAL_DATASET_DIR=evals/datasets
+```
+
+---
+
+## 14. Project Structure
+
+```text
+researchos/
+├── README.md
+├── pyproject.toml
+├── .env.example
+├── Makefile
+├── docker/
+│   ├── runtime/
+│   │   └── Dockerfile
+│   ├── sandbox/
+│   │   └── Dockerfile
+│   └── compose/
+│       ├── docker-compose.dev.yml
+│       ├── docker-compose.eval.yml
+│       └── docker-compose.prod.yml
+├── scripts/
+│   ├── start_backend.sh
+│   ├── start_web_demo.sh
+│   ├── run_eval.sh
+│   ├── build_runtime.sh
+│   └── build_sandbox.sh
+├── src/
+│   └── researchos/
+│       ├── api/
+│       │   ├── main.py
+│       │   ├── routes_runs.py
+│       │   ├── routes_artifacts.py
+│       │   ├── routes_health.py
+│       │   └── sse.py
+│       ├── graph/
+│       │   ├── state.py
+│       │   ├── workflow.py
+│       │   ├── nodes_planner.py
+│       │   ├── nodes_searcher.py
+│       │   ├── nodes_reader.py
+│       │   ├── nodes_evidence.py
+│       │   ├── nodes_verifier.py
+│       │   ├── nodes_writer.py
+│       │   └── nodes_reviewer.py
+│       ├── models/
+│       │   ├── run.py
+│       │   ├── source.py
+│       │   ├── evidence.py
+│       │   ├── claim.py
+│       │   ├── citation.py
+│       │   └── event.py
+│       ├── stores/
+│       │   ├── run_store.py
+│       │   ├── event_store.py
+│       │   ├── artifact_store.py
+│       │   ├── evidence_store.py
+│       │   └── memory_store.py
+│       ├── retrieval/
+│       │   ├── query_planner.py
+│       │   ├── web_search.py
+│       │   ├── hybrid_search.py
+│       │   ├── reranker.py
+│       │   └── source_ranker.py
+│       ├── tools/
+│       │   ├── base.py
+│       │   ├── search_tool.py
+│       │   ├── browser_tool.py
+│       │   ├── pdf_tool.py
+│       │   ├── sandbox_tool.py
+│       │   └── mcp_gateway.py
+│       ├── sandbox/
+│       │   ├── runner.py
+│       │   ├── policy.py
+│       │   └── docker_client.py
+│       ├── evals/
+│       │   ├── harness.py
+│       │   ├── retrieval_eval.py
+│       │   ├── citation_eval.py
+│       │   ├── claim_eval.py
+│       │   ├── report_eval.py
+│       │   └── regression.py
+│       ├── skills/
+│       │   ├── loader.py
+│       │   ├── registry.py
+│       │   └── schema.py
+│       ├── memory/
+│       │   ├── context_store.py
+│       │   └── structured_store.py
+│       ├── config.py
+│       ├── logging_config.py
+│       └── telemetry.py
+├── evals/
+│   ├── datasets/
+│   │   ├── smoke_cases.jsonl
+│   │   ├── finance_cases.jsonl
+│   │   ├── legal_cases.jsonl
+│   │   └── academic_cases.jsonl
+│   ├── goldens/
+│   └── reports/
+├── skills/
+│   ├── academic_literature_review/
+│   │   ├── skill.yaml
+│   │   └── prompts.md
+│   ├── financial_analysis/
+│   │   ├── skill.yaml
+│   │   └── prompts.md
+│   ├── legal_research/
+│   │   ├── skill.yaml
+│   │   └── prompts.md
+│   └── market_research/
+│       ├── skill.yaml
+│       └── prompts.md
+├── tests/
+│   ├── unit/
+│   ├── integration/
+│   └── eval/
+├── web/
+│   └── README.md
+└── workspace/
+```
+
+---
+
+## 15. Evaluation Harness
+
+The Evaluation Harness should support local and CI execution.
+
+### 15.1 Dataset Format
+
+`evals/datasets/smoke_cases.jsonl`
+
+```json
+{"case_id":"smoke_001","query":"Compare the advantages and risks of using AI agents for legal research.","expected_source_keywords":["legal research","AI","risk"],"expected_report_sections":["summary","evidence","risks","limitations"]}
+```
+
+### 15.2 Metrics
+
+Implement the following metrics:
+
+```text
+retrieval_recall
+citation_precision
+claim_support_rate
+source_diversity
+conflict_detection_score
+report_completeness
+latency_sec
+estimated_cost
+tool_success_rate
+```
+
+### 15.3 Eval Result Format
+
+```json
+{
+  "eval_run_id": "eval_001",
+  "case_id": "smoke_001",
+  "research_run_id": "run_001",
+  "metrics": {
+    "retrieval_recall": 0.8,
+    "citation_precision": 0.75,
+    "claim_support_rate": 0.82,
+    "report_completeness": 0.9,
+    "latency_sec": 120,
+    "estimated_cost": 0.31
+  },
+  "verdict": "pass",
+  "regression": false
+}
+```
+
+### 15.4 Commands
+
+在电脑的终端 Terminal 里输入以下命令。
+如果你使用 VS Code / Cursor / Codex，本地项目打开后，在底部 Terminal 面板输入。
+
+```bash
+# Run smoke eval
+python -m researchos.evals.harness --dataset evals/datasets/smoke_cases.jsonl
+
+# Compare two eval reports
+python -m researchos.evals.regression \
+  --baseline evals/reports/baseline.json \
+  --candidate evals/reports/latest.json
+```
+
+---
+
+## 16. Skills System
+
+Skills are domain-specific research packages.
+
+```text
+skills/
+  academic_literature_review/
+    skill.yaml
+    prompts.md
+  financial_analysis/
+    skill.yaml
+    prompts.md
+  legal_research/
+    skill.yaml
+    prompts.md
+  market_research/
+    skill.yaml
+    prompts.md
+```
+
+Example `skill.yaml`:
+
+```yaml
+name: academic_literature_review
+description: Literature review skill for academic research tasks.
+triggers:
+  - literature review
+  - paper survey
+  - related work
+appliesTo:
+  agents:
+    - planner
+    - searcher
+    - writer
+inputs:
+  - research_question
+  - domain
+outputs:
+  - related_work_report
+  - citation_table
+permissions:
+  tools:
+    - search
+    - pdf_parser
+    - citation_verifier
+```
+
+Rules:
+
+1. Skills should be loaded only when relevant.
+2. Agent-scoped skills should only be visible to allowed agents.
+3. Skills should define triggers, input schema, output schema, and allowed tools.
+4. Skills should not directly execute tools; they guide agents and tool selection.
+
+---
+
+## 17. Tool Permission Model
+
+Tools should be assigned permission levels.
+
+| Level | Type | Examples | Policy |
+|---|---|---|---|
+| L0 | Read-only retrieval | search, source lookup | Auto allowed |
+| L1 | File parsing | PDF parser, table reader | Auto allowed inside workspace |
+| L2 | Browser automation | crawl, browser navigation | Log and rate limit |
+| L3 | Code execution | Python, Bash | Must run in sandbox |
+| L4 | External write | database write, cloud write | Human approval required |
+
+High-risk tools should trigger human-in-the-loop approval.
+
+---
+
+## 18. Artifact Types
+
+Every run should generate structured artifacts.
+
+```text
+outputs/report.md
+outputs/report.json
+outputs/executive_summary.md
+
+evidence/sources.json
+evidence/evidence.json
+evidence/claims.json
+evidence/evidence_graph.json
+evidence/citation_verification.json
+
+traces/events.jsonl
+traces/tool_calls.jsonl
+traces/model_calls.jsonl
+traces/state_snapshots.jsonl
+
+evals/eval_result.json
+evals/eval_report.md
+
+logs/runtime.log
+```
+
+Artifact metadata example:
+
+```json
+{
+  "artifact_id": "art_001",
+  "run_id": "run_001",
+  "path": "evidence/evidence_graph.json",
+  "type": "evidence_graph",
+  "mime_type": "application/json",
+  "size_bytes": 10240,
+  "created_at": "2026-01-01T00:00:00Z"
+}
+```
+
+---
+
+## 19. Frontend Requirements
+
+Frontend can be implemented after P0 backend is stable.
+
+Recommended stack:
+
+```text
+React
+TypeScript
+Vite or Next.js
+Tailwind CSS
+SSE client
+Graph visualization library, optional
+```
+
+Core pages:
+
+```text
+1. Research Run Creation
+2. Research Timeline
+3. Source List
+4. Evidence Graph Viewer
+5. Citation Inspector
+6. Report Viewer
+7. Artifact Download
+8. Eval Report Viewer
+```
+
+Research timeline should show:
+
+```text
+Planning
+Searching
+Reading
+Extracting Evidence
+Verifying Claims
+Writing Report
+Reviewing
+Completed
+```
+
+---
+
+## 20. Quick Start
+
+### 20.1 Prerequisites
+
+Install:
+
+- Python 3.12+
+- Docker Desktop
+- Node.js 22+, only if using frontend
+- uv, recommended
+
+### 20.2 Local Backend Startup
+
+在电脑的终端 Terminal 里输入以下命令。
+如果你使用 VS Code / Cursor / Codex，请先打开项目文件夹，然后在底部 Terminal 面板输入。
+
+```bash
+git clone <your-repo-url>
+cd researchos
+
+uv python install 3.12
+uv venv --python 3.12
+
+# macOS / Linux
+source .venv/bin/activate
+
+# Windows PowerShell
+# .venv\Scripts\Activate.ps1
+
+uv sync --extra dev --extra test
+
+cp .env.example .env
+
+python -m researchos.api.main
+```
+
+Default backend URL:
+
+```text
+http://localhost:8000
+```
+
+Health checks:
+
+```text
+http://localhost:8000/healthz
+http://localhost:8000/readyz
+http://localhost:8000/metricsz
+```
+
+### 20.3 Docker Startup
+
+在电脑的终端 Terminal 里输入：
+
+```bash
+docker compose -f docker/compose/docker-compose.dev.yml up --build
+```
+
+Stop services:
+
+```bash
+docker compose -f docker/compose/docker-compose.dev.yml down
+```
+
+### 20.4 Run Tests
+
+在项目根目录的终端 Terminal 里输入：
+
+```bash
+pytest tests -v
+```
+
+### 20.5 Run Eval Harness
+
+在项目根目录的终端 Terminal 里输入：
+
+```bash
+python -m researchos.evals.harness --dataset evals/datasets/smoke_cases.jsonl
+```
+
+---
+
+## 21. Makefile Targets
+
+Recommended Makefile targets:
+
+```makefile
+.PHONY: serve test lint format eval docker-up docker-down
+
+serve:
+	python -m researchos.api.main
+
+test:
+	pytest tests -v
+
+lint:
+	ruff check src tests
+
+format:
+	ruff format src tests
+
+eval:
+	python -m researchos.evals.harness --dataset evals/datasets/smoke_cases.jsonl
+
+docker-up:
+	docker compose -f docker/compose/docker-compose.dev.yml up --build
+
+docker-down:
+	docker compose -f docker/compose/docker-compose.dev.yml down
+```
+
+---
+
+## 22. Testing Strategy
+
+### 22.1 Unit Tests
+
+Test:
+
+- Pydantic schemas
+- workspace path guards
+- artifact store
+- event store
+- source parser
+- citation verifier
+- evaluation metrics
+
+### 22.2 Integration Tests
+
+Test:
+
+- create research run
+- stream SSE events
+- cancel run
+- list artifacts
+- download artifact
+- sandbox execution
+- end-to-end smoke research task
+
+### 22.3 Regression Tests
+
+Test:
+
+- same dataset should not regress on core metrics
+- prompt changes should be evaluated
+- model routing changes should be evaluated
+- retrieval changes should be evaluated
+
+Example tests:
+
+```text
+test_research_run_lifecycle.py
+test_sse_event_contract.py
+test_artifact_api_contract.py
+test_workspace_isolation.py
+test_sandbox_policy.py
+test_citation_verification.py
+test_eval_harness_smoke.py
+test_regression_metrics.py
+```
+
+---
+
+## 23. Implementation Roadmap
+
+### Phase 0: Project Scaffold
+
+- Create project structure.
+- Add pyproject.toml.
+- Add FastAPI app.
+- Add basic config.
+- Add healthz / readyz / metricsz.
+- Add workspace initializer.
+
+### Phase 1: Formal Run API
+
+- Implement `POST /v1/research-runs`.
+- Implement `GET /v1/research-runs/{run_id}`.
+- Implement `POST /v1/research-runs/{run_id}/cancel`.
+- Implement local file-based RunStore.
+- Add request_id idempotency.
+
+### Phase 2: SSE Event Streaming
+
+- Implement EventStore.
+- Implement event sequence numbers.
+- Implement `GET /v1/research-runs/{run_id}/events`.
+- Add event persistence to JSONL.
+- Add client reconnect support with last event id, optional.
+
+### Phase 3: LangGraph Workflow
+
+- Define ResearchState.
+- Implement Planner node.
+- Implement Search node.
+- Implement Reader node.
+- Implement Evidence node.
+- Implement Verifier node.
+- Implement Writer node.
+- Implement Reviewer node.
+- Persist state snapshots.
+
+### Phase 4: Evidence Graph
+
+- Implement Source / Evidence / Claim / Citation models.
+- Save evidence artifacts.
+- Save `evidence_graph.json`.
+- Add claim-evidence linking.
+- Add citation verification.
+
+### Phase 5: Artifact API
+
+- Implement ArtifactStore.
+- Index report, evidence, trace, eval files.
+- Implement artifact list endpoint.
+- Implement artifact content endpoint.
+- Add path traversal protection.
+
+### Phase 6: Docker Runtime and Sandbox
+
+- Add runtime Dockerfile.
+- Add sandbox Dockerfile.
+- Add docker-compose.dev.yml.
+- Implement sandbox runner.
+- Add timeout, memory limit, path isolation.
+- Add sandbox tests.
+
+### Phase 7: Evaluation Harness
+
+- Add eval dataset format.
+- Add smoke cases.
+- Implement metric evaluators.
+- Implement eval runner.
+- Save eval reports.
+- Add regression comparison.
+
+### Phase 8: MCP Gateway
+
+- Add MCP gateway client.
+- Add tool registry.
+- Add permission model.
+- Add human approval hooks for high-risk tools.
+
+### Phase 9: Frontend
+
+- Create React workspace.
+- Add run creation page.
+- Add SSE timeline.
+- Add source/evidence view.
+- Add report viewer.
+- Add artifact downloader.
+
+---
+
+## 24. Coding Principles
+
+1. Prefer explicit state over hidden prompt context.
+2. Every agent node must have typed input and output.
+3. Every tool call must be logged.
+4. Every generated claim should have evidence.
+5. Every artifact should be run-scoped.
+6. Every external path must be validated.
+7. Long-running tasks must stream progress.
+8. Failed tasks must preserve traces and logs.
+9. Evaluation must be automated and repeatable.
+10. The system should be useful even before the frontend is finished.
+
+---
+
+## 25. Interview Talking Points
+
+This project demonstrates:
+
+- LangGraph-based durable multi-agent orchestration.
+- Run-oriented API design for long-running Agent tasks.
+- SSE event streaming for real-time progress.
+- Evidence-first report generation.
+- Claim-level citation verification.
+- Docker runtime and sandbox separation.
+- Workspace isolation and artifact management.
+- Evaluation Harness for Agent quality measurement.
+- MCP-style tool gateway and permission control.
+- AgentOps observability through traces, events, metrics, and replayable artifacts.
+
+---
+
+## 26. License
+
+MIT License.

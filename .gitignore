@@ -1,0 +1,16 @@
+.env
+.pytest_cache/
+.ruff_cache/
+__pycache__/
+*.py[cod]
+
+# Local development state
+.venv/
+.idea/
+workspace/
+
+# Generated artifacts
+evals/reports/
+dist/
+build/
+*.egg-info/
