@@ -22,6 +22,7 @@ def test_local_corpus_loader_reads_markdown_and_text_files(tmp_path):
 
     assert [document.title for document in loaded.documents] == ["finance", "Legal Citation Memo"]
     assert [file.path for file in loaded.files] == ["finance.txt", "legal.md"]
+    assert loaded.documents[1].text == "Unsupported citations create legal risk."
     assert loaded.documents[1].url == "corpus://legal.md"
 
 

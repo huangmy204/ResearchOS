@@ -49,10 +49,13 @@ class LocalCorpusLoader:
                 raise FileNotFoundError(path)
             if path.suffix.lower() not in SUPPORTED_CORPUS_SUFFIXES:
                 continue
-            text = path.read_text(encoding="utf-8").strip()
+            raw_text = path.read_text(encoding="utf-8").strip()
+            if not raw_text:
+                continue
+            title = _extract_title(path, raw_text)
+            text = _document_text_for_retrieval(path, raw_text)
             if not text:
                 continue
-            title = _extract_title(path, text)
             relative = self._relative_path(path)
             documents.append(
                 ResearchDocument(
@@ -171,3 +174,13 @@ def _format_corpus_text(path: Path, title: str, text: str) -> str:
     if path.suffix.lower() == ".md" and not normalized.lstrip().startswith("#"):
         return f"# {title.strip()}\n\n{normalized}\n"
     return f"{normalized}\n"
+
+
+def _document_text_for_retrieval(path: Path, text: str) -> str:
+    if path.suffix.lower() != ".md":
+        return text.strip()
+
+    lines = text.splitlines()
+    if lines and lines[0].strip().startswith("#"):
+        return "\n".join(lines[1:]).strip()
+    return text.strip()
