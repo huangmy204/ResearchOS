@@ -997,10 +997,14 @@ def test_research_run_can_use_term_overlap_reranker(tmp_path):
     assert app.state.services.workflow.reranker.__class__.__name__ == "TermOverlapReranker"
     assert diagnostics["top_k"] == 2
     assert diagnostics["candidate_limit"] == 4
+    assert diagnostics["query_planner"] == "rule_based_multi_query"
+    assert len(diagnostics["query_variants"]) >= 3
+    assert diagnostics["query_results"][0]["kind"] == "active"
     assert diagnostics["reranker"]["name"] == "term_overlap"
     assert diagnostics["reranker"]["applied"] is True
     assert diagnostics["retrieved_count"] == 2
     assert eval_result["metrics"]["reranker_applied"] == 1.0
+    assert eval_result["dimensions"]["retrieval"]["query_variant_count"] >= 3
     assert len(bundle["evidence"]) == 2
 
 

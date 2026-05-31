@@ -8,12 +8,17 @@ from researchos.planning import ResearchPlanner
 from researchos.reporting import ReportDraft, ReportWriter
 from researchos.retrieval import (
     NoopReranker,
+    QueryPlanner,
     QueryRewriter,
+    QueryVariant,
+    QueryVariantResult,
     Reranker,
     RetrievedChunk,
     Retriever,
+    RuleBasedMultiQueryPlanner,
     RuleBasedQueryRewriter,
     SourceDiversityPolicy,
+    retrieve_with_query_variants,
 )
 from researchos.runtime.state import NodeResult, WorkflowState
 from researchos.stores.artifact_store import ArtifactStore
@@ -51,6 +56,7 @@ class RetrievalNode:
         *,
         reranker: Reranker | None = None,
         diversity_policy: SourceDiversityPolicy | None = None,
+        query_planner: QueryPlanner | None = None,
         top_k: int = 3,
         candidate_limit: int = 6,
         min_evidence_count: int = 1,
@@ -59,6 +65,7 @@ class RetrievalNode:
         self.artifact_store = artifact_store
         self.reranker = reranker or NoopReranker()
         self.diversity_policy = diversity_policy or SourceDiversityPolicy()
+        self.query_planner = query_planner or RuleBasedMultiQueryPlanner()
         self.top_k = top_k
         self.candidate_limit = candidate_limit
         self.min_evidence_count = min_evidence_count
@@ -66,13 +73,21 @@ class RetrievalNode:
     def execute(self, state: WorkflowState) -> NodeResult:
         candidate_limit = max(self.candidate_limit, self.top_k)
         retrieval_query = state.retrieval_query or state.run.query
-        candidates = self.retriever.retrieve(
-            retrieval_query,
-            state.run.documents,
-            limit=candidate_limit,
+        query_variants = self.query_planner.plan(
+            state.run,
+            active_query=retrieval_query,
         )
+        multi_query_result = retrieve_with_query_variants(
+            self.retriever,
+            query_variants,
+            state.run.documents,
+            per_query_limit=candidate_limit,
+            merged_limit=candidate_limit,
+        )
+        candidates = multi_query_result.candidates
+        rerank_query = _combined_rerank_query(retrieval_query, query_variants)
         reranked_candidates = self.reranker.rerank(
-            retrieval_query,
+            rerank_query,
             candidates,
             limit=candidate_limit,
         )
@@ -101,6 +116,9 @@ class RetrievalNode:
             top_k=self.top_k,
             quality_gate=state.retrieval_quality,
             query=retrieval_query,
+            query_planner_name=self.query_planner.name,
+            query_variants=query_variants,
+            query_results=multi_query_result.query_results,
         )
         self.artifact_store.write_json(
             state.run,
@@ -507,11 +525,26 @@ def _build_retrieval_diagnostics(
     top_k: int,
     quality_gate: dict,
     query: str,
+    query_planner_name: str,
+    query_variants: list[QueryVariant],
+    query_results: list[QueryVariantResult],
 ) -> dict:
     return {
         "run_id": state.run.run_id,
         "query": query,
         "original_query": state.run.query,
+        "query_planner": query_planner_name,
+        "query_variants": [
+            {"kind": variant.kind, "query": variant.query} for variant in query_variants
+        ],
+        "query_results": [
+            {
+                "kind": result.kind,
+                "query": result.query,
+                "result_count": result.result_count,
+            }
+            for result in query_results
+        ],
         "query_rewrites": state.query_rewrites,
         "retry_count": state.retrieval_retry_count,
         "strategy": getattr(retriever, "strategy_name", retriever.__class__.__name__),
@@ -549,6 +582,11 @@ def _build_retrieval_diagnostics(
             for index, chunk in enumerate(chunks)
         ],
     }
+
+
+def _combined_rerank_query(active_query: str, query_variants: list[QueryVariant]) -> str:
+    variant_queries = [variant.query for variant in query_variants]
+    return " ".join(dict.fromkeys([active_query, *variant_queries]))
 
 
 def _build_retrieval_quality(
