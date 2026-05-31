@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from researchos.evals.metrics import build_workflow_eval_result
 from researchos.models.evidence import CitationVerification, Claim, Evidence, Source
 from researchos.planning import ResearchPlanner
 from researchos.reporting import ReportDraft, ReportWriter
@@ -326,43 +327,34 @@ class EvaluationNode:
         self.artifact_store = artifact_store
 
     def execute(self, state: WorkflowState) -> NodeResult:
-        has_evidence = state.evidence is not None
-        metrics = (
-            {
-                "retrieval_recall": 1.0,
-                "citation_precision": 1.0,
-                "claim_support_rate": 1.0,
-                "report_completeness": 1.0,
-                "latency_sec": 0.0,
-                "tool_success_rate": 1.0,
-            }
-            if has_evidence
-            else {
-                "retrieval_recall": 0.0,
-                "citation_precision": 0.0,
-                "claim_support_rate": 0.0,
-                "report_completeness": 0.3,
-                "latency_sec": 0.0,
-                "tool_success_rate": 1.0,
-            }
+        diagnostics = _read_json_artifact(
+            self.artifact_store,
+            state,
+            "sources/retrieval_diagnostics.json",
         )
-        verdict = "pass" if has_evidence else "needs_evidence"
+        report_json = (
+            state.report.report_json
+            if state.report is not None
+            else _read_json_artifact(self.artifact_store, state, "outputs/report.json")
+        )
+        eval_result = build_workflow_eval_result(
+            run=state.run,
+            diagnostics=diagnostics,
+            sources=state.sources,
+            evidence_items=state.evidence_items,
+            claims=state.claims,
+            verifications=state.verifications,
+            report_json=report_json if isinstance(report_json, dict) else None,
+        )
         self.artifact_store.write_json(
             state.run,
             "evals/eval_result.json",
-            {
-                "eval_run_id": f"eval_{state.run.run_id}",
-                "case_id": "mvp_smoke",
-                "research_run_id": state.run.run_id,
-                "metrics": metrics,
-                "verdict": verdict,
-                "regression": not has_evidence,
-            },
+            eval_result,
         )
         self.artifact_store.write_text(
             state.run,
             "evals/eval_report.md",
-            f"# MVP Smoke Eval\n\nVerdict: {verdict}\n",
+            _build_workflow_eval_report(eval_result),
         )
         return NodeResult(
             node_name=self.name,
@@ -370,7 +362,11 @@ class EvaluationNode:
             step_name="reviewing completeness",
             completed_steps=6,
             event_type="review.completed",
-            payload={"run_id": state.run.run_id, "quality_score": metrics["report_completeness"]},
+            payload={
+                "run_id": state.run.run_id,
+                "quality_score": eval_result["metrics"]["report_completeness"],
+                "verdict": eval_result["verdict"],
+            },
             artifacts=["evals/eval_result.json", "evals/eval_report.md"],
         )
 
@@ -504,6 +500,46 @@ def _retrieval_diagnostic_result(
         "text_chars": len(chunk.text),
         "url": chunk.url,
     }
+
+
+def _read_json_artifact(
+    artifact_store: ArtifactStore,
+    state: WorkflowState,
+    logical_path: str,
+) -> object | None:
+    try:
+        return artifact_store.read_json(state.run, logical_path)
+    except FileNotFoundError:
+        return None
+
+
+def _build_workflow_eval_report(eval_result: dict) -> str:
+    lines = [
+        "# MVP Smoke Eval",
+        "",
+        f"Verdict: {eval_result['verdict']}",
+        "",
+        "## Metrics",
+        "",
+    ]
+    lines.extend(
+        f"- {name}: {value:.4f}"
+        for name, value in eval_result["metrics"].items()
+    )
+    lines.extend(
+        [
+            "",
+            "## Retrieval",
+            "",
+            f"- Strategy: {eval_result['dimensions']['retrieval'].get('strategy')}",
+            f"- Top K: {eval_result['dimensions']['retrieval'].get('top_k')}",
+            (
+                "- Reranker: "
+                f"{eval_result['dimensions']['retrieval'].get('reranker', {}).get('name')}"
+            ),
+        ]
+    )
+    return "\n".join(lines) + "\n"
 
 
 def _build_source(state: WorkflowState, chunk: RetrievedChunk | None, index: int) -> Source:

@@ -301,6 +301,10 @@ def test_research_run_uses_local_documents_for_evidence(tmp_path):
             f"/v1/research-runs/{run_id}/artifacts/content",
             params={"path": "outputs/report.json"},
         ).json()
+        eval_result = client.get(
+            f"/v1/research-runs/{run_id}/artifacts/content",
+            params={"path": "evals/eval_result.json"},
+        ).json()
         plan = client.get(
             f"/v1/research-runs/{run_id}/artifacts/content",
             params={"path": "plans/research_plan.json"},
@@ -317,6 +321,8 @@ def test_research_run_uses_local_documents_for_evidence(tmp_path):
         assert retrieval_results[0]["score"] > 0
         assert report_json["sources"][0]["title"] == "Legal AI memo"
         assert report_json["evidence"][0]["evidence_id"] == evidence[0]["evidence_id"]
+        assert eval_result["metrics"]["retrieved_count"] == 1.0
+        assert eval_result["dimensions"]["retrieval"]["strategy"] == "keyword"
         assert plan[0]["agent"] == "planner"
         assert [node["node"] for node in workflow_trace["nodes"]] == [
             "planning",
@@ -397,6 +403,10 @@ def test_research_run_builds_top_k_evidence_bundle(tmp_path):
             f"/v1/research-runs/{run_id}/artifacts/content",
             params={"path": "outputs/report.md"},
         )
+        eval_result = client.get(
+            f"/v1/research-runs/{run_id}/artifacts/content",
+            params={"path": "evals/eval_result.json"},
+        ).json()
 
     assert len(retrieval_results) == 3
     assert [result["rank"] for result in retrieval_results] == [1, 2, 3]
@@ -405,6 +415,9 @@ def test_research_run_builds_top_k_evidence_bundle(tmp_path):
     assert diagnostics["chunking"]["max_chunk_chars"] == 600
     assert diagnostics["retrieved_count"] == 3
     assert diagnostics["results"][0]["rank"] == 1
+    assert eval_result["metrics"]["retrieved_count"] == 3.0
+    assert eval_result["metrics"]["source_diversity_ratio"] == 1.0
+    assert eval_result["metrics"]["average_retrieval_score"] > 0
     assert len(bundle["sources"]) == 3
     assert len(bundle["evidence"]) == 3
     assert len(bundle["claims"]) == 3
@@ -508,6 +521,7 @@ def test_langgraph_workflow_branches_when_retrieval_has_no_evidence(tmp_path):
     assert report_json["claims"] == []
     assert eval_result["verdict"] == "needs_evidence"
     assert eval_result["metrics"]["retrieval_recall"] == 0.0
+    assert eval_result["metrics"]["retrieved_count"] == 0.0
 
 
 def test_research_run_can_write_report_with_llm_writer(tmp_path):
@@ -819,6 +833,10 @@ def test_research_run_can_use_term_overlap_reranker(tmp_path):
             params={"path": "sources/retrieval_diagnostics.json"},
         ).json()
         bundle = client.get(f"/v1/research-runs/{run_id}/evidence").json()
+        eval_result = client.get(
+            f"/v1/research-runs/{run_id}/artifacts/content",
+            params={"path": "evals/eval_result.json"},
+        ).json()
 
     assert app.state.services.workflow.reranker.__class__.__name__ == "TermOverlapReranker"
     assert diagnostics["top_k"] == 2
@@ -826,6 +844,7 @@ def test_research_run_can_use_term_overlap_reranker(tmp_path):
     assert diagnostics["reranker"]["name"] == "term_overlap"
     assert diagnostics["reranker"]["applied"] is True
     assert diagnostics["retrieved_count"] == 2
+    assert eval_result["metrics"]["reranker_applied"] == 1.0
     assert len(bundle["evidence"]) == 2
 
 
@@ -884,6 +903,10 @@ def test_research_run_can_enforce_source_diversity(tmp_path):
             f"/v1/research-runs/{run_id}/artifacts/content",
             params={"path": "sources/parsed/retrieval_results.json"},
         ).json()
+        eval_result = client.get(
+            f"/v1/research-runs/{run_id}/artifacts/content",
+            params={"path": "evals/eval_result.json"},
+        ).json()
 
     document_indexes = [result["document_index"] for result in retrieval_results]
     assert diagnostics["source_diversity"]["enabled"] is True
@@ -892,6 +915,8 @@ def test_research_run_can_enforce_source_diversity(tmp_path):
         set(document_indexes)
     )
     assert len(document_indexes) == len(set(document_indexes))
+    assert eval_result["metrics"]["source_diversity_enabled"] == 1.0
+    assert eval_result["metrics"]["source_diversity_ratio"] == 1.0
 
 
 def test_evidence_api_returns_bundle_and_graph(tmp_path):

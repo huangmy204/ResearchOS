@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 
 from researchos.api.services import build_services
 from researchos.config import get_settings
+from researchos.evals.metrics import build_quality_metrics, verdict_from_metrics
 from researchos.models.run import ResearchDocument, ResearchRunCreate
 
 
@@ -69,24 +70,39 @@ async def run_case(case: EvalCase, services) -> EvalResult:
         raise RuntimeError(f"Run disappeared during eval: {run.run_id}")
 
     report_text, _ = services.artifact_store.read_text(completed, "outputs/report.md")
+    report_json = services.artifact_store.read_json(completed, "outputs/report.json")
+    diagnostics = services.artifact_store.read_json(
+        completed, "sources/retrieval_diagnostics.json"
+    )
     sources = services.artifact_store.read_json(completed, "evidence/sources.json")
+    evidence = services.artifact_store.read_json(completed, "evidence/evidence.json")
     claims = services.artifact_store.read_json(completed, "evidence/claims.json")
     citation_verification = services.artifact_store.read_json(
         completed, "evidence/citation_verification.json"
     )
 
-    metrics = {
-        "retrieval_recall": score_keyword_recall(case.expected_source_keywords, sources),
-        "citation_precision": score_citation_precision(citation_verification),
-        "claim_support_rate": score_claim_support_rate(claims),
-        "report_completeness": score_report_completeness(
-            case.expected_report_sections, report_text
+    metrics = build_quality_metrics(
+        diagnostics=diagnostics if isinstance(diagnostics, dict) else None,
+        sources=sources if isinstance(sources, list) else [],
+        evidence_items=evidence if isinstance(evidence, list) else [],
+        claims=claims if isinstance(claims, list) else [],
+        verifications=(
+            citation_verification if isinstance(citation_verification, list) else []
         ),
-        "latency_sec": 0.0,
-        "estimated_cost": 0.0,
-        "tool_success_rate": 1.0 if completed.status == "completed" else 0.0,
-    }
-    verdict = "pass" if min_quality_score(metrics) >= 0.5 else "fail"
+        report_json=report_json if isinstance(report_json, dict) else None,
+        run_status=completed.status,
+    )
+    metrics["expected_source_recall"] = round(
+        score_keyword_recall(case.expected_source_keywords, sources),
+        4,
+    )
+    metrics["expected_section_recall"] = round(
+        score_report_completeness(case.expected_report_sections, report_text),
+        4,
+    )
+    verdict = verdict_from_metrics(metrics)
+    if metrics["expected_source_recall"] < 0.5 or metrics["expected_section_recall"] < 0.5:
+        verdict = "fail"
     result = EvalResult(
         eval_run_id=f"eval_{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}_{case.case_id}",
         case_id=case.case_id,

@@ -40,4 +40,7 @@ async def test_eval_harness_runs_dataset(tmp_path, monkeypatch):
     assert len(results) == 1
     assert results[0].verdict == "pass"
     assert results[0].metrics["retrieval_recall"] == 1.0
+    assert results[0].metrics["retrieved_count"] == 1.0
+    assert results[0].metrics["expected_source_recall"] == 1.0
+    assert results[0].metrics["expected_section_recall"] == 1.0
     assert (tmp_path / "evals" / "reports" / "smoke_cases_latest.json").is_file()
