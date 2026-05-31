@@ -338,6 +338,55 @@ def test_research_run_uses_local_documents_for_evidence(tmp_path):
         assert trace_body["nodes"][5]["node"] == "report_writing"
 
 
+def test_research_run_can_use_langgraph_workflow_engine(tmp_path):
+    app = create_app(
+        Settings(
+            env="test",
+            workspace_root=tmp_path / "workspace",
+            runtime_profile="test",
+            log_level="INFO",
+            api_host="127.0.0.1",
+            api_port=8000,
+            cors_allow_origins=[],
+            workflow_engine="langgraph",
+        )
+    )
+    app.state.services.workflow.step_delay_sec = 0
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/research-runs",
+            json={
+                "session_id": "session",
+                "query": "legal research citation risk",
+                "documents": [
+                    {
+                        "title": "Legal AI memo",
+                        "text": "Unsupported citations create legal research risk.",
+                    }
+                ],
+            },
+        )
+        run_id = response.json()["run_id"]
+        run = _wait_for_run_completion(client, run_id)
+        trace = client.get(f"/v1/research-runs/{run_id}/trace").json()
+
+    assert app.state.services.settings.workflow_engine == "langgraph"
+    assert app.state.services.workflow.engine.__class__.__name__ == "LangGraphWorkflowEngine"
+    assert run["status"] == "completed"
+    assert trace["summary"]["completed"] is True
+    assert trace["summary"]["node_names"] == [
+        "planning",
+        "retrieval",
+        "reading",
+        "evidence_extraction",
+        "verification",
+        "report_writing",
+        "evaluation",
+        "completion",
+    ]
+
+
 def test_research_run_can_write_report_with_llm_writer(tmp_path):
     app = create_app(
         Settings(

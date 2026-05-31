@@ -861,6 +861,8 @@ RESEARCHOS_ENV=development
 RESEARCHOS_WORKSPACE_ROOT=workspace
 RESEARCHOS_RUNTIME_PROFILE=developer
 RESEARCHOS_LOG_LEVEL=INFO
+RESEARCHOS_RETRIEVAL_STRATEGY=keyword
+RESEARCHOS_WORKFLOW_ENGINE=sequential
 
 # API
 RESEARCHOS_API_HOST=0.0.0.0
@@ -916,6 +918,11 @@ MCP_GATEWAY_URL=
 RESEARCHOS_ENABLE_EVAL=true
 RESEARCHOS_EVAL_DATASET_DIR=evals/datasets
 ```
+
+`RESEARCHOS_WORKFLOW_ENGINE` supports:
+
+- `sequential`: stable local MVP workflow engine.
+- `langgraph`: LangGraph `StateGraph` workflow engine, currently mapped to the same node order for safe migration.
 
 ---
 

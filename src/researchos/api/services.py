@@ -8,7 +8,12 @@ from researchos.models_router import ModelRouter
 from researchos.planning import LLMResearchPlanner, ResearchPlanner, StaticResearchPlanner
 from researchos.reporting import EvidenceReportWriter, LLMReportWriter, ReportWriter
 from researchos.retrieval.factory import build_retriever
-from researchos.runtime import ResearchWorkflow
+from researchos.runtime import (
+    LangGraphWorkflowEngine,
+    ResearchWorkflow,
+    SequentialWorkflowEngine,
+    WorkflowEngine,
+)
 from researchos.stores import ArtifactStore, EventStore, RunStore, Workspace
 from researchos.verification import CitationVerifier, LLMCitationVerifier, RuleBasedCitationVerifier
 
@@ -36,6 +41,7 @@ def build_services(settings: Settings) -> AppServices:
     research_planner = build_research_planner(settings, model_router, llm_client)
     report_writer = build_report_writer(settings, model_router, llm_client)
     citation_verifier = build_citation_verifier(settings, model_router, llm_client)
+    workflow_engine = build_workflow_engine(settings, run_store, event_store, artifact_store)
     workflow = ResearchWorkflow(
         run_store,
         event_store,
@@ -44,6 +50,7 @@ def build_services(settings: Settings) -> AppServices:
         research_planner=research_planner,
         report_writer=report_writer,
         citation_verifier=citation_verifier,
+        engine=workflow_engine,
     )
     return AppServices(
         settings=settings,
@@ -64,6 +71,31 @@ def build_llm_client(settings: Settings) -> LLMClient:
             timeout_sec=settings.llm_timeout_sec,
         )
     return MockLLMClient()
+
+
+def build_workflow_engine(
+    settings: Settings,
+    run_store: RunStore,
+    event_store: EventStore,
+    artifact_store: ArtifactStore,
+) -> WorkflowEngine:
+    engine_name = settings.workflow_engine.strip().lower()
+    if engine_name == "sequential":
+        return SequentialWorkflowEngine(
+            run_store=run_store,
+            event_store=event_store,
+            artifact_store=artifact_store,
+        )
+    if engine_name == "langgraph":
+        return LangGraphWorkflowEngine(
+            run_store=run_store,
+            event_store=event_store,
+            artifact_store=artifact_store,
+        )
+    supported = "sequential, langgraph"
+    raise ValueError(
+        f"Unsupported workflow engine '{settings.workflow_engine}'. Use one of: {supported}."
+    )
 
 
 def build_research_planner(

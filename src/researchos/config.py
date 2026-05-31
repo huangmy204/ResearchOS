@@ -15,6 +15,7 @@ class Settings:
     api_port: int
     cors_allow_origins: list[str]
     retrieval_strategy: str = "keyword"
+    workflow_engine: str = "sequential"
     basic_model: str = ""
     basic_base_url: str = ""
     reasoning_model: str = ""
@@ -58,6 +59,7 @@ def get_settings() -> Settings:
         api_port=int(os.getenv("RESEARCHOS_API_PORT", "8000")),
         cors_allow_origins=[origin.strip() for origin in origins.split(",") if origin.strip()],
         retrieval_strategy=os.getenv("RESEARCHOS_RETRIEVAL_STRATEGY", "keyword"),
+        workflow_engine=os.getenv("RESEARCHOS_WORKFLOW_ENGINE", "sequential"),
         basic_model=os.getenv("BASIC_MODEL", ""),
         basic_base_url=os.getenv("BASIC_BASE_URL", ""),
         reasoning_model=os.getenv("REASONING_MODEL", ""),

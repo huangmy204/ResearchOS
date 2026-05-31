@@ -10,6 +10,7 @@ def test_load_local_env_reads_key_value_pairs(tmp_path, monkeypatch):
             [
                 "# local secrets",
                 "RESEARCHOS_LLM_CLIENT=openai_compatible",
+                "RESEARCHOS_WORKFLOW_ENGINE=langgraph",
                 "WRITER_MODEL='qwen-plus'",
                 'WRITER_BASE_URL="https://dashscope.aliyuncs.com/compatible-mode/v1"',
             ]
@@ -18,6 +19,7 @@ def test_load_local_env_reads_key_value_pairs(tmp_path, monkeypatch):
     )
 
     monkeypatch.delenv("RESEARCHOS_LLM_CLIENT", raising=False)
+    monkeypatch.delenv("RESEARCHOS_WORKFLOW_ENGINE", raising=False)
     monkeypatch.delenv("WRITER_MODEL", raising=False)
     monkeypatch.delenv("WRITER_BASE_URL", raising=False)
 
@@ -25,6 +27,7 @@ def test_load_local_env_reads_key_value_pairs(tmp_path, monkeypatch):
 
     assert loaded is True
     assert get_settings().llm_client == "openai_compatible"
+    assert get_settings().workflow_engine == "langgraph"
     assert get_settings().writer_model == "qwen-plus"
     assert get_settings().writer_base_url == "https://dashscope.aliyuncs.com/compatible-mode/v1"
 
