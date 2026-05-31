@@ -42,6 +42,7 @@ def test_bm25_retriever_returns_no_chunks_without_overlap():
 def test_build_retriever_selects_supported_strategies():
     assert build_retriever("keyword").__class__.__name__ == "LocalKeywordRetriever"
     assert build_retriever("bm25").__class__.__name__ == "BM25Retriever"
+    assert build_retriever("embedding").__class__.__name__ == "EmbeddingRetriever"
 
 
 def test_build_retriever_passes_chunking_configuration():

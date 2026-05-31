@@ -55,8 +55,9 @@
 20. LangGraph 条件边与证据不足分支。
 21. RAG top-k 多证据检索与 evidence bundle。
 22. RAG chunk 切分参数、overlap 与召回质量。
-23. LangGraph checkpoint 与复杂编排。
-24. Docker 沙箱与部署。
+23. Embedding Retriever、向量表示与 cosine similarity。
+24. LangGraph checkpoint 与复杂编排。
+25. Docker 沙箱与部署。
 
 ## 文档目录
 

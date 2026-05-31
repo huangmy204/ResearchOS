@@ -707,6 +707,55 @@ def test_research_run_can_use_bm25_retrieval_strategy(tmp_path):
         assert sources[0]["title"] == "Citation risk memo"
 
 
+def test_research_run_can_use_embedding_retrieval_strategy(tmp_path):
+    app = create_app(
+        Settings(
+            env="test",
+            workspace_root=tmp_path / "workspace",
+            runtime_profile="test",
+            log_level="INFO",
+            api_host="127.0.0.1",
+            api_port=8000,
+            cors_allow_origins=[],
+            retrieval_strategy="embedding",
+        )
+    )
+    app.state.services.workflow.step_delay_sec = 0
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/research-runs",
+            json={
+                "session_id": "session",
+                "query": "legal citation risk",
+                "documents": [
+                    {
+                        "title": "Cooking note",
+                        "text": "Bread fermentation uses flour water salt.",
+                    },
+                    {
+                        "title": "Citation risk memo",
+                        "text": (
+                            "Legal citation risk requires citation verification. "
+                            "Unsupported citation evidence creates legal risk."
+                        ),
+                    },
+                ],
+            },
+        )
+        run_id = response.json()["run_id"]
+        _wait_for_run_completion(client, run_id)
+
+        sources = client.get(
+            f"/v1/research-runs/{run_id}/artifacts/content",
+            params={"path": "evidence/sources.json"},
+        ).json()
+
+    assert app.state.services.settings.retrieval_strategy == "embedding"
+    assert app.state.services.workflow.retriever.__class__.__name__ == "EmbeddingRetriever"
+    assert sources[0]["title"] == "Citation risk memo"
+
+
 def test_evidence_api_returns_bundle_and_graph(tmp_path):
     app = create_app(
         Settings(
