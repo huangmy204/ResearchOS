@@ -4,7 +4,13 @@ from datetime import UTC, datetime
 
 from researchos.planning import ResearchPlanner, StaticResearchPlanner
 from researchos.reporting import EvidenceReportWriter, ReportWriter
-from researchos.retrieval import LocalKeywordRetriever, NoopReranker, Reranker, Retriever
+from researchos.retrieval import (
+    LocalKeywordRetriever,
+    NoopReranker,
+    Reranker,
+    Retriever,
+    SourceDiversityPolicy,
+)
 from researchos.runtime.engine import SequentialWorkflowEngine, WorkflowCancelled, WorkflowEngine
 from researchos.runtime.nodes import (
     EvaluationNode,
@@ -32,6 +38,7 @@ class ResearchWorkflow:
         artifact_store: ArtifactStore,
         retriever: Retriever | None = None,
         reranker: Reranker | None = None,
+        diversity_policy: SourceDiversityPolicy | None = None,
         research_planner: ResearchPlanner | None = None,
         report_writer: ReportWriter | None = None,
         citation_verifier: CitationVerifier | None = None,
@@ -46,6 +53,7 @@ class ResearchWorkflow:
         self.artifact_store = artifact_store
         self.retriever = retriever or LocalKeywordRetriever()
         self.reranker = reranker or NoopReranker()
+        self.diversity_policy = diversity_policy or SourceDiversityPolicy()
         self.retrieval_top_k = retrieval_top_k
         self.retrieval_candidate_limit = retrieval_candidate_limit
         self.research_planner = research_planner or StaticResearchPlanner()
@@ -142,6 +150,7 @@ class ResearchWorkflow:
                 self.retriever,
                 self.artifact_store,
                 reranker=self.reranker,
+                diversity_policy=self.diversity_policy,
                 top_k=self.retrieval_top_k,
                 candidate_limit=self.retrieval_candidate_limit,
             ),

@@ -58,8 +58,9 @@
 23. Embedding Retriever、向量表示与 cosine similarity。
 24. Retrieval diagnostics、检索策略对比与可观察性。
 25. RAG reranker、候选召回与二次排序。
-26. LangGraph checkpoint 与复杂编排。
-27. Docker 沙箱与部署。
+26. Source diversity 与多来源证据控制。
+27. LangGraph checkpoint 与复杂编排。
+28. Docker 沙箱与部署。
 
 ## 文档目录
 

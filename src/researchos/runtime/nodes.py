@@ -5,7 +5,13 @@ from datetime import UTC, datetime
 from researchos.models.evidence import CitationVerification, Claim, Evidence, Source
 from researchos.planning import ResearchPlanner
 from researchos.reporting import ReportDraft, ReportWriter
-from researchos.retrieval import NoopReranker, Reranker, RetrievedChunk, Retriever
+from researchos.retrieval import (
+    NoopReranker,
+    Reranker,
+    RetrievedChunk,
+    Retriever,
+    SourceDiversityPolicy,
+)
 from researchos.runtime.state import NodeResult, WorkflowState
 from researchos.stores.artifact_store import ArtifactStore
 from researchos.verification import CitationVerifier
@@ -41,12 +47,14 @@ class RetrievalNode:
         artifact_store: ArtifactStore,
         *,
         reranker: Reranker | None = None,
+        diversity_policy: SourceDiversityPolicy | None = None,
         top_k: int = 3,
         candidate_limit: int = 6,
     ):
         self.retriever = retriever
         self.artifact_store = artifact_store
         self.reranker = reranker or NoopReranker()
+        self.diversity_policy = diversity_policy or SourceDiversityPolicy()
         self.top_k = top_k
         self.candidate_limit = candidate_limit
 
@@ -57,7 +65,12 @@ class RetrievalNode:
             state.run.documents,
             limit=candidate_limit,
         )
-        chunks = self.reranker.rerank(state.run.query, candidates, limit=self.top_k)
+        reranked_candidates = self.reranker.rerank(
+            state.run.query,
+            candidates,
+            limit=candidate_limit,
+        )
+        chunks = self.diversity_policy.select(reranked_candidates, limit=self.top_k)
         state.retrieved_chunks = chunks
         state.retrieved_chunk = chunks[0] if chunks else None
         state.sources = (
@@ -70,7 +83,9 @@ class RetrievalNode:
             state,
             self.retriever,
             self.reranker,
+            self.diversity_policy,
             candidates,
+            reranked_candidates,
             chunks,
             candidate_limit=candidate_limit,
             top_k=self.top_k,
@@ -428,7 +443,9 @@ def _build_retrieval_diagnostics(
     state: WorkflowState,
     retriever: Retriever,
     reranker: Reranker,
+    diversity_policy: SourceDiversityPolicy,
     candidates: list[RetrievedChunk],
+    reranked_candidates: list[RetrievedChunk],
     chunks: list[RetrievedChunk],
     *,
     candidate_limit: int,
@@ -444,6 +461,11 @@ def _build_retrieval_diagnostics(
         "document_count": len(state.run.documents),
         "candidate_count": len(candidates),
         "retrieved_count": len(chunks),
+        "source_diversity": {
+            "enabled": diversity_policy.enabled,
+            "max_chunks_per_source": diversity_policy.max_chunks_per_source,
+            "selected_source_count": len({chunk.document_index for chunk in chunks}),
+        },
         "reranker": {
             "name": getattr(reranker, "name", reranker.__class__.__name__),
             "score_type": getattr(reranker, "score_type", "unknown"),
@@ -456,6 +478,10 @@ def _build_retrieval_diagnostics(
         "candidates": [
             _retrieval_diagnostic_result(candidate, retriever, index)
             for index, candidate in enumerate(candidates)
+        ],
+        "reranked_candidates": [
+            _retrieval_diagnostic_result(candidate, retriever, index)
+            for index, candidate in enumerate(reranked_candidates)
         ],
         "results": [
             _retrieval_diagnostic_result(chunk, retriever, index)

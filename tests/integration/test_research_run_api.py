@@ -829,6 +829,71 @@ def test_research_run_can_use_term_overlap_reranker(tmp_path):
     assert len(bundle["evidence"]) == 2
 
 
+def test_research_run_can_enforce_source_diversity(tmp_path):
+    app = create_app(
+        Settings(
+            env="test",
+            workspace_root=tmp_path / "workspace",
+            runtime_profile="test",
+            log_level="INFO",
+            api_host="127.0.0.1",
+            api_port=8000,
+            cors_allow_origins=[],
+            retrieval_top_k=3,
+            retrieval_candidate_limit=6,
+            retrieval_max_chunks_per_source=1,
+            retrieval_chunk_chars=55,
+        )
+    )
+    app.state.services.workflow.step_delay_sec = 0
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/research-runs",
+            json={
+                "session_id": "session",
+                "query": "legal citation risk",
+                "documents": [
+                    {
+                        "title": "Dense legal memo",
+                        "text": (
+                            "Legal citation risk appears in generated reports. "
+                            "Legal citation risk also appears in research memos. "
+                            "Legal citation risk needs verification."
+                        ),
+                    },
+                    {
+                        "title": "Verification memo",
+                        "text": "Citation verification reduces legal risk.",
+                    },
+                    {
+                        "title": "Cooking note",
+                        "text": "Bread fermentation uses flour water salt.",
+                    },
+                ],
+            },
+        )
+        run_id = response.json()["run_id"]
+        _wait_for_run_completion(client, run_id)
+
+        diagnostics = client.get(
+            f"/v1/research-runs/{run_id}/artifacts/content",
+            params={"path": "sources/retrieval_diagnostics.json"},
+        ).json()
+        retrieval_results = client.get(
+            f"/v1/research-runs/{run_id}/artifacts/content",
+            params={"path": "sources/parsed/retrieval_results.json"},
+        ).json()
+
+    document_indexes = [result["document_index"] for result in retrieval_results]
+    assert diagnostics["source_diversity"]["enabled"] is True
+    assert diagnostics["source_diversity"]["max_chunks_per_source"] == 1
+    assert diagnostics["source_diversity"]["selected_source_count"] == len(
+        set(document_indexes)
+    )
+    assert len(document_indexes) == len(set(document_indexes))
+
+
 def test_evidence_api_returns_bundle_and_graph(tmp_path):
     app = create_app(
         Settings(

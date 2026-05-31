@@ -1,5 +1,6 @@
 from researchos.retrieval.base import RetrievedChunk, Retriever
 from researchos.retrieval.bm25 import BM25Retriever
+from researchos.retrieval.diversity import SourceDiversityPolicy
 from researchos.retrieval.embedding import DeterministicHashEmbeddingModel, EmbeddingRetriever
 from researchos.retrieval.factory import build_retriever
 from researchos.retrieval.local_text import LocalKeywordRetriever, retrieve_local_text
@@ -14,6 +15,7 @@ __all__ = [
     "RetrievedChunk",
     "Reranker",
     "Retriever",
+    "SourceDiversityPolicy",
     "TermOverlapReranker",
     "build_reranker",
     "build_retriever",
