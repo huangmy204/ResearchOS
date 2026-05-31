@@ -64,8 +64,9 @@
 29. Query rewrite、检索重试与 agentic feedback loop。
 30. Multi-query retrieval、子问题检索与问题升阶。
 31. Local corpus ingestion、本地语料接入与 manifest 追踪。
-32. LangGraph checkpoint 与复杂编排。
-33. Docker 沙箱与部署。
+32. Corpus API、资料库可见性与系统主线分层。
+33. LangGraph checkpoint 与复杂编排。
+34. Docker 沙箱与部署。
 
 ## 文档目录
 

@@ -45,3 +45,16 @@ def test_local_corpus_loader_can_load_selected_relative_paths(tmp_path):
 
     assert len(loaded.documents) == 1
     assert loaded.files[0].path == "notes/legal.txt"
+
+
+def test_local_corpus_loader_lists_files_without_creating_documents(tmp_path):
+    corpus_root = tmp_path / "corpus"
+    corpus_root.mkdir()
+    (corpus_root / "memo.md").write_text("# Research Memo\n\nEvidence text.", encoding="utf-8")
+
+    files = LocalCorpusLoader(corpus_root).list_files()
+
+    assert len(files) == 1
+    assert files[0].path == "memo.md"
+    assert files[0].title == "Research Memo"
+    assert files[0].suffix == ".md"

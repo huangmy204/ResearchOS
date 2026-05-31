@@ -396,6 +396,42 @@ def test_research_run_can_load_documents_from_local_corpus(tmp_path):
     assert "corpus.loaded" in [event["event_type"] for event in events]
 
 
+def test_corpus_api_lists_available_local_corpus_files(tmp_path):
+    workspace_root = tmp_path / "workspace"
+    corpus_root = workspace_root / "corpus"
+    corpus_root.mkdir(parents=True)
+    (corpus_root / "legal.md").write_text(
+        "# Legal Citation Memo\n\nUnsupported citations create legal research risk.",
+        encoding="utf-8",
+    )
+    (corpus_root / "finance.txt").write_text(
+        "Revenue recognition evidence memo.",
+        encoding="utf-8",
+    )
+    app = create_app(
+        Settings(
+            env="test",
+            workspace_root=workspace_root,
+            corpus_root=corpus_root,
+            runtime_profile="test",
+            log_level="INFO",
+            api_host="127.0.0.1",
+            api_port=8000,
+            cors_allow_origins=[],
+        )
+    )
+
+    with TestClient(app) as client:
+        response = client.get("/v1/corpus")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["corpus_root"] == str(corpus_root)
+    assert [file["path"] for file in body["files"]] == ["finance.txt", "legal.md"]
+    assert body["files"][1]["title"] == "Legal Citation Memo"
+    assert body["files"][1]["suffix"] == ".md"
+
+
 def test_research_run_builds_top_k_evidence_bundle(tmp_path):
     app = create_app(
         Settings(

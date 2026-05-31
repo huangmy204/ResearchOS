@@ -49,6 +49,7 @@ async def create_research_run(
                         "path": file.path,
                         "title": file.title,
                         "size_bytes": file.size_bytes,
+                        "suffix": file.suffix,
                     }
                     for file in loaded_corpus.files
                 ],

@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from researchos.api.routes_artifacts import router as artifacts_router
+from researchos.api.routes_corpus import router as corpus_router
 from researchos.api.routes_evidence import router as evidence_router
 from researchos.api.routes_health import router as health_router
 from researchos.api.routes_models import router as models_router
@@ -30,6 +31,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_headers=["*"],
     )
     app.include_router(health_router)
+    app.include_router(corpus_router)
     app.include_router(runs_router)
     app.include_router(models_router)
     app.include_router(evidence_router)

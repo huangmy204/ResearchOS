@@ -13,6 +13,7 @@ class CorpusFileRecord:
     path: str
     title: str
     size_bytes: int
+    suffix: str = ""
 
 
 @dataclass(frozen=True)
@@ -55,9 +56,25 @@ class LocalCorpusLoader:
                     path=relative,
                     title=title,
                     size_bytes=path.stat().st_size,
+                    suffix=path.suffix.lower(),
                 )
             )
         return LoadedCorpus(documents=documents, files=files)
+
+    def list_files(self) -> list[CorpusFileRecord]:
+        files: list[CorpusFileRecord] = []
+        for path in self._discover_files():
+            text = path.read_text(encoding="utf-8").strip()
+            title = _extract_title(path, text) if text else _extract_title(path, "")
+            files.append(
+                CorpusFileRecord(
+                    path=path.relative_to(self.corpus_root).as_posix(),
+                    title=title,
+                    size_bytes=path.stat().st_size,
+                    suffix=path.suffix.lower(),
+                )
+            )
+        return files
 
     def _discover_files(self) -> list[Path]:
         if not self.corpus_root.exists():
