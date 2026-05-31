@@ -41,8 +41,9 @@
 13. LLM verifier、结构化 JSON 输出与证据支持判断。
 14. LLM planner、结构化计划与 LangGraph 前置设计。
 15. 节点化 workflow、WorkflowState、NodeResult 与 trace。
-16. LangGraph 工作流。
-17. Docker 沙箱与部署。
+16. Workflow Trace API 与可观察性。
+17. LangGraph 工作流。
+18. Docker 沙箱与部署。
 
 ## 文档目录
 

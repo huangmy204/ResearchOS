@@ -623,3 +623,11 @@ completion
 ```
 
 这份 trace 可以帮助你在面试里解释：一个 research run 不是一段黑盒文本生成，而是多个可追踪节点串起来的流程。
+
+也可以使用正式 Trace API：
+
+```powershell
+Invoke-RestMethod "http://localhost:8000/v1/research-runs/$($llmRun.run_id)/trace"
+```
+
+这个接口会额外返回 `summary`，更适合前端和演示。

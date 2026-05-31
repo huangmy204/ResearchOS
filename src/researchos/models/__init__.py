@@ -16,6 +16,7 @@ from researchos.models.run import (
     ResearchRunListResponse,
     RunStatus,
 )
+from researchos.models.trace import WorkflowTraceNode, WorkflowTraceResponse
 
 __all__ = [
     "ArtifactListResponse",
@@ -34,4 +35,6 @@ __all__ = [
     "ResearchRunListResponse",
     "RunStatus",
     "Source",
+    "WorkflowTraceNode",
+    "WorkflowTraceResponse",
 ]
