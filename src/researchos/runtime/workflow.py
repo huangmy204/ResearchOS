@@ -46,6 +46,7 @@ class ResearchWorkflow:
         *,
         retrieval_top_k: int = 3,
         retrieval_candidate_limit: int = 6,
+        retrieval_min_evidence_count: int = 1,
         step_delay_sec: float = 0.05,
     ):
         self.run_store = run_store
@@ -56,6 +57,7 @@ class ResearchWorkflow:
         self.diversity_policy = diversity_policy or SourceDiversityPolicy()
         self.retrieval_top_k = retrieval_top_k
         self.retrieval_candidate_limit = retrieval_candidate_limit
+        self.retrieval_min_evidence_count = retrieval_min_evidence_count
         self.research_planner = research_planner or StaticResearchPlanner()
         self.report_writer = report_writer or EvidenceReportWriter()
         self.citation_verifier = citation_verifier or RuleBasedCitationVerifier()
@@ -153,6 +155,7 @@ class ResearchWorkflow:
                 diversity_policy=self.diversity_policy,
                 top_k=self.retrieval_top_k,
                 candidate_limit=self.retrieval_candidate_limit,
+                min_evidence_count=self.retrieval_min_evidence_count,
             ),
             ReadingNode(),
             EvidenceExtractionNode(),

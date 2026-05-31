@@ -15,6 +15,7 @@ class WorkflowState:
     plan: list[dict] = field(default_factory=list)
     retrieved_chunks: list[RetrievedChunk] = field(default_factory=list)
     retrieved_chunk: RetrievedChunk | None = None
+    retrieval_quality: dict = field(default_factory=dict)
     sources: list[Source] = field(default_factory=list)
     source: Source | None = None
     evidence_items: list[Evidence] = field(default_factory=list)

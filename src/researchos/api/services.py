@@ -58,6 +58,7 @@ def build_services(settings: Settings) -> AppServices:
         ),
         retrieval_top_k=settings.retrieval_top_k,
         retrieval_candidate_limit=settings.retrieval_candidate_limit,
+        retrieval_min_evidence_count=settings.retrieval_min_evidence_count,
         research_planner=research_planner,
         report_writer=report_writer,
         citation_verifier=citation_verifier,

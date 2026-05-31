@@ -88,6 +88,9 @@ def build_quality_metrics(
         "min_retrieval_score": retrieval_metrics["min_retrieval_score"],
         "reranker_applied": retrieval_metrics["reranker_applied"],
         "source_diversity_enabled": retrieval_metrics["source_diversity_enabled"],
+        "retrieval_quality_gate_passed": retrieval_metrics[
+            "retrieval_quality_gate_passed"
+        ],
     }
     return {name: round(value, 4) for name, value in metrics.items()}
 
@@ -104,6 +107,7 @@ def retrieval_metrics_from_diagnostics(diagnostics: dict[str, Any] | None) -> di
             "min_retrieval_score": 0.0,
             "reranker_applied": 0.0,
             "source_diversity_enabled": 0.0,
+            "retrieval_quality_gate_passed": 0.0,
         }
 
     results = diagnostics.get("results") if isinstance(diagnostics, dict) else []
@@ -117,6 +121,7 @@ def retrieval_metrics_from_diagnostics(diagnostics: dict[str, Any] | None) -> di
     diversity = selected_source_count / retrieved_count if retrieved_count else 0.0
     reranker = diagnostics.get("reranker", {})
     source_diversity = diagnostics.get("source_diversity", {})
+    quality_gate = diagnostics.get("quality_gate", {})
 
     return {
         "retrieval_recall": 1.0 if retrieved_count > 0 else 0.0,
@@ -128,6 +133,7 @@ def retrieval_metrics_from_diagnostics(diagnostics: dict[str, Any] | None) -> di
         "min_retrieval_score": min(scores) if scores else 0.0,
         "reranker_applied": 1.0 if reranker.get("applied") else 0.0,
         "source_diversity_enabled": 1.0 if source_diversity.get("enabled") else 0.0,
+        "retrieval_quality_gate_passed": 1.0 if quality_gate.get("passed") else 0.0,
     }
 
 
@@ -174,6 +180,7 @@ def build_retrieval_dimension(diagnostics: dict[str, Any] | None) -> dict:
         "chunking": diagnostics.get("chunking", {}),
         "reranker": diagnostics.get("reranker", {}),
         "source_diversity": diagnostics.get("source_diversity", {}),
+        "quality_gate": diagnostics.get("quality_gate", {}),
     }
 
 

@@ -189,6 +189,8 @@ class LangGraphWorkflowEngine(SequentialWorkflowEngine):
         workflow_state = graph_state["workflow_state"]
         if workflow_state.retrieved_chunk is None:
             return "insufficient_evidence"
+        if workflow_state.retrieval_quality.get("passed") is False:
+            return "insufficient_evidence"
         return "has_evidence"
 
     def _assert_branch_nodes_available(self, nodes: list[WorkflowNode]) -> None:

@@ -51,6 +51,7 @@ class RetrievalNode:
         diversity_policy: SourceDiversityPolicy | None = None,
         top_k: int = 3,
         candidate_limit: int = 6,
+        min_evidence_count: int = 1,
     ):
         self.retriever = retriever
         self.artifact_store = artifact_store
@@ -58,6 +59,7 @@ class RetrievalNode:
         self.diversity_policy = diversity_policy or SourceDiversityPolicy()
         self.top_k = top_k
         self.candidate_limit = candidate_limit
+        self.min_evidence_count = min_evidence_count
 
     def execute(self, state: WorkflowState) -> NodeResult:
         candidate_limit = max(self.candidate_limit, self.top_k)
@@ -74,6 +76,10 @@ class RetrievalNode:
         chunks = self.diversity_policy.select(reranked_candidates, limit=self.top_k)
         state.retrieved_chunks = chunks
         state.retrieved_chunk = chunks[0] if chunks else None
+        state.retrieval_quality = _build_retrieval_quality(
+            chunks,
+            min_evidence_count=self.min_evidence_count,
+        )
         state.sources = (
             [_build_source(state, chunk, index) for index, chunk in enumerate(chunks)]
             if chunks
@@ -90,6 +96,7 @@ class RetrievalNode:
             chunks,
             candidate_limit=candidate_limit,
             top_k=self.top_k,
+            quality_gate=state.retrieval_quality,
         )
         self.artifact_store.write_json(
             state.run,
@@ -287,6 +294,7 @@ class InsufficientEvidenceReportNode:
             "title": "ResearchOS Evidence Gap Report",
             "summary": "No supporting evidence was retrieved from the available local documents.",
             "generation": {"mode": "insufficient_evidence"},
+            "retrieval_quality": state.retrieval_quality,
             "claims": [],
             "evidence": [],
             "sources": [],
@@ -446,6 +454,7 @@ def _build_retrieval_diagnostics(
     *,
     candidate_limit: int,
     top_k: int,
+    quality_gate: dict,
 ) -> dict:
     return {
         "run_id": state.run.run_id,
@@ -457,6 +466,7 @@ def _build_retrieval_diagnostics(
         "document_count": len(state.run.documents),
         "candidate_count": len(candidates),
         "retrieved_count": len(chunks),
+        "quality_gate": quality_gate,
         "source_diversity": {
             "enabled": diversity_policy.enabled,
             "max_chunks_per_source": diversity_policy.max_chunks_per_source,
@@ -483,6 +493,25 @@ def _build_retrieval_diagnostics(
             _retrieval_diagnostic_result(chunk, retriever, index)
             for index, chunk in enumerate(chunks)
         ],
+    }
+
+
+def _build_retrieval_quality(
+    chunks: list[RetrievedChunk],
+    *,
+    min_evidence_count: int,
+) -> dict:
+    retrieved_count = len(chunks)
+    passed = retrieved_count >= min_evidence_count
+    return {
+        "passed": passed,
+        "min_evidence_count": min_evidence_count,
+        "retrieved_count": retrieved_count,
+        "reason": (
+            "enough_evidence"
+            if passed
+            else f"retrieved_count_below_minimum:{retrieved_count}<{min_evidence_count}"
+        ),
     }
 
 

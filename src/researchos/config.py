@@ -21,6 +21,7 @@ class Settings:
     retrieval_candidate_limit: int = 6
     retrieval_reranker: str = "none"
     retrieval_max_chunks_per_source: int = 0
+    retrieval_min_evidence_count: int = 1
     workflow_engine: str = "sequential"
     basic_model: str = ""
     basic_base_url: str = ""
@@ -74,6 +75,9 @@ def get_settings() -> Settings:
         retrieval_reranker=os.getenv("RESEARCHOS_RETRIEVAL_RERANKER", "none"),
         retrieval_max_chunks_per_source=int(
             os.getenv("RESEARCHOS_RETRIEVAL_MAX_CHUNKS_PER_SOURCE", "0")
+        ),
+        retrieval_min_evidence_count=int(
+            os.getenv("RESEARCHOS_RETRIEVAL_MIN_EVIDENCE_COUNT", "1")
         ),
         workflow_engine=os.getenv("RESEARCHOS_WORKFLOW_ENGINE", "sequential"),
         basic_model=os.getenv("BASIC_MODEL", ""),
