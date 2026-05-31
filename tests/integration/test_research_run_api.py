@@ -432,6 +432,102 @@ def test_corpus_api_lists_available_local_corpus_files(tmp_path):
     assert body["files"][1]["suffix"] == ".md"
 
 
+def test_corpus_api_can_create_read_and_research_document(tmp_path):
+    workspace_root = tmp_path / "workspace"
+    corpus_root = workspace_root / "corpus"
+    app = create_app(
+        Settings(
+            env="test",
+            workspace_root=workspace_root,
+            corpus_root=corpus_root,
+            runtime_profile="test",
+            log_level="INFO",
+            api_host="127.0.0.1",
+            api_port=8000,
+            cors_allow_origins=[],
+        )
+    )
+    app.state.services.workflow.step_delay_sec = 0
+
+    with TestClient(app) as client:
+        created = client.post(
+            "/v1/corpus/documents",
+            json={
+                "path": "legal/citation-risk.md",
+                "title": "Legal Citation Risk",
+                "text": "Unsupported citations create legal research risk.",
+            },
+        )
+        listed = client.get("/v1/corpus")
+        content = client.get(
+            "/v1/corpus/content",
+            params={"path": "legal/citation-risk.md"},
+        )
+        run_response = client.post(
+            "/v1/research-runs",
+            json={
+                "session_id": "session",
+                "query": "legal citation risk",
+                "options": {"include_corpus": True},
+            },
+        )
+        run_id = run_response.json()["run_id"]
+        run = _wait_for_run_completion(client, run_id)
+        sources = client.get(
+            f"/v1/research-runs/{run_id}/artifacts/content",
+            params={"path": "evidence/sources.json"},
+        ).json()
+
+    assert created.status_code == 201
+    assert created.json()["path"] == "legal/citation-risk.md"
+    assert listed.json()["files"][0]["path"] == "legal/citation-risk.md"
+    assert content.json()["title"] == "Legal Citation Risk"
+    assert "Unsupported citations" in content.json()["text"]
+    assert run["status"] == "completed"
+    assert run["documents"][0]["url"] == "corpus://legal/citation-risk.md"
+    assert sources[0]["title"] == "Legal Citation Risk"
+
+
+def test_corpus_api_rejects_duplicate_document_without_overwrite(tmp_path):
+    workspace_root = tmp_path / "workspace"
+    corpus_root = workspace_root / "corpus"
+    app = create_app(
+        Settings(
+            env="test",
+            workspace_root=workspace_root,
+            corpus_root=corpus_root,
+            runtime_profile="test",
+            log_level="INFO",
+            api_host="127.0.0.1",
+            api_port=8000,
+            cors_allow_origins=[],
+        )
+    )
+
+    with TestClient(app) as client:
+        first = client.post(
+            "/v1/corpus/documents",
+            json={"title": "Legal Memo", "text": "First version."},
+        )
+        second = client.post(
+            "/v1/corpus/documents",
+            json={"title": "Legal Memo", "text": "Second version."},
+        )
+        overwritten = client.post(
+            "/v1/corpus/documents",
+            json={
+                "title": "Legal Memo",
+                "text": "Second version.",
+                "overwrite": True,
+            },
+        )
+
+    assert first.status_code == 201
+    assert second.status_code == 409
+    assert overwritten.status_code == 201
+    assert "Second version." in overwritten.json()["text"]
+
+
 def test_research_run_builds_top_k_evidence_bundle(tmp_path):
     app = create_app(
         Settings(

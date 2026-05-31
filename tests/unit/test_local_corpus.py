@@ -58,3 +58,54 @@ def test_local_corpus_loader_lists_files_without_creating_documents(tmp_path):
     assert files[0].path == "memo.md"
     assert files[0].title == "Research Memo"
     assert files[0].suffix == ".md"
+
+
+def test_local_corpus_loader_writes_markdown_document(tmp_path):
+    corpus_root = tmp_path / "corpus"
+    loader = LocalCorpusLoader(corpus_root)
+
+    document = loader.write_document(
+        title="Legal Citation Risk",
+        text="Unsupported citations create legal risk.",
+    )
+
+    assert document.path == "legal-citation-risk.md"
+    assert document.title == "Legal Citation Risk"
+    assert document.text.startswith("# Legal Citation Risk")
+    assert (corpus_root / "legal-citation-risk.md").exists()
+
+
+def test_local_corpus_loader_rejects_duplicate_without_overwrite(tmp_path):
+    loader = LocalCorpusLoader(tmp_path / "corpus")
+    loader.write_document(title="Legal Memo", text="First version.")
+
+    with pytest.raises(FileExistsError):
+        loader.write_document(title="Legal Memo", text="Second version.")
+
+
+def test_local_corpus_loader_can_overwrite_document(tmp_path):
+    loader = LocalCorpusLoader(tmp_path / "corpus")
+    loader.write_document(title="Legal Memo", text="First version.")
+
+    document = loader.write_document(
+        title="Legal Memo",
+        text="Second version.",
+        overwrite=True,
+    )
+
+    assert "Second version." in document.text
+
+
+def test_local_corpus_loader_reads_written_document_by_relative_path(tmp_path):
+    loader = LocalCorpusLoader(tmp_path / "corpus")
+    loader.write_document(
+        title="Finance Memo",
+        text="Revenue recognition evidence.",
+        relative_path="finance/memo.md",
+    )
+
+    document = loader.read_document("finance/memo.md")
+
+    assert document.path == "finance/memo.md"
+    assert document.title == "Finance Memo"
+    assert document.suffix == ".md"

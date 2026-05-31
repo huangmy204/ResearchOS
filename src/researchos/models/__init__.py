@@ -1,5 +1,10 @@
 from researchos.models.artifact import ArtifactListResponse, ArtifactMetadata
-from researchos.models.corpus import CorpusFile, CorpusListResponse
+from researchos.models.corpus import (
+    CorpusDocumentCreate,
+    CorpusDocumentResponse,
+    CorpusFile,
+    CorpusListResponse,
+)
 from researchos.models.event import ResearchEvent, ResearchEventListResponse
 from researchos.models.evidence import (
     CitationVerification,
@@ -25,6 +30,8 @@ __all__ = [
     "CitationVerification",
     "Claim",
     "CorpusFile",
+    "CorpusDocumentCreate",
+    "CorpusDocumentResponse",
     "CorpusListResponse",
     "Evidence",
     "EvidenceBundleResponse",

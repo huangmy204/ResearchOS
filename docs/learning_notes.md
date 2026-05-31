@@ -65,8 +65,9 @@
 30. Multi-query retrieval、子问题检索与问题升阶。
 31. Local corpus ingestion、本地语料接入与 manifest 追踪。
 32. Corpus API、资料库可见性与系统主线分层。
-33. LangGraph checkpoint 与复杂编排。
-34. Docker 沙箱与部署。
+33. Corpus 写入 API、路径安全与资料入库闭环。
+34. LangGraph checkpoint 与复杂编排。
+35. Docker 沙箱与部署。
 
 ## 文档目录
 
