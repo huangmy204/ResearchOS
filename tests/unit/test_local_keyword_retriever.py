@@ -48,6 +48,38 @@ def test_chunk_text_splits_long_paragraph_by_sentence_boundary():
     assert chunks[0] == "Alpha sentence about research."
 
 
+def test_chunk_text_can_add_overlap_between_adjacent_chunks():
+    text = (
+        "Alpha sentence about research. "
+        "Beta sentence about citation risk. "
+        "Gamma sentence."
+    )
+
+    chunks = chunk_text(text, max_chars=45, overlap_chars=9)
+
+    assert chunks[1].startswith("research. Beta sentence")
+    assert all(len(chunk) <= 45 for chunk in chunks)
+
+
+def test_local_keyword_retriever_uses_configured_chunk_size():
+    retriever = LocalKeywordRetriever(max_chunk_chars=45, chunk_overlap_chars=9)
+    documents = [
+        ResearchDocument(
+            title="Legal AI memo",
+            text=(
+                "Alpha sentence about research. "
+                "Beta sentence about citation risk. "
+                "Gamma sentence about legal research."
+            ),
+        )
+    ]
+
+    chunks = retriever.retrieve("legal research citation risk", documents, limit=3)
+
+    assert len(chunks) > 1
+    assert all(len(chunk.text) <= 45 for chunk in chunks)
+
+
 def test_tokenize_normalizes_case_and_punctuation():
     assert tokenize("Legal Research, CITATION risk!") == [
         "legal",

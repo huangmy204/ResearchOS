@@ -46,7 +46,11 @@ def build_services(settings: Settings) -> AppServices:
         run_store,
         event_store,
         artifact_store,
-        retriever=build_retriever(settings.retrieval_strategy),
+        retriever=build_retriever(
+            settings.retrieval_strategy,
+            max_chunk_chars=settings.retrieval_chunk_chars,
+            chunk_overlap_chars=settings.retrieval_chunk_overlap_chars,
+        ),
         research_planner=research_planner,
         report_writer=report_writer,
         citation_verifier=citation_verifier,

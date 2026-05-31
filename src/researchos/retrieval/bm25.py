@@ -13,10 +13,12 @@ class BM25Retriever:
         self,
         *,
         max_chunk_chars: int = 600,
+        chunk_overlap_chars: int = 0,
         k1: float = 1.5,
         b: float = 0.75,
     ):
         self.max_chunk_chars = max_chunk_chars
+        self.chunk_overlap_chars = chunk_overlap_chars
         self.k1 = k1
         self.b = b
 
@@ -64,7 +66,11 @@ class BM25Retriever:
     def _build_corpus(self, documents: list[ResearchDocument]) -> list[_CorpusItem]:
         corpus: list[_CorpusItem] = []
         for document_index, document in enumerate(documents):
-            for chunk in chunk_text(document.text, max_chars=self.max_chunk_chars):
+            for chunk in chunk_text(
+                document.text,
+                max_chars=self.max_chunk_chars,
+                overlap_chars=self.chunk_overlap_chars,
+            ):
                 title_terms = tokenize(document.title)
                 chunk_terms = tokenize(chunk)
                 terms = title_terms + chunk_terms

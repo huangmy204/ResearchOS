@@ -15,6 +15,8 @@ class Settings:
     api_port: int
     cors_allow_origins: list[str]
     retrieval_strategy: str = "keyword"
+    retrieval_chunk_chars: int = 600
+    retrieval_chunk_overlap_chars: int = 0
     workflow_engine: str = "sequential"
     basic_model: str = ""
     basic_base_url: str = ""
@@ -59,6 +61,10 @@ def get_settings() -> Settings:
         api_port=int(os.getenv("RESEARCHOS_API_PORT", "8000")),
         cors_allow_origins=[origin.strip() for origin in origins.split(",") if origin.strip()],
         retrieval_strategy=os.getenv("RESEARCHOS_RETRIEVAL_STRATEGY", "keyword"),
+        retrieval_chunk_chars=int(os.getenv("RESEARCHOS_RETRIEVAL_CHUNK_CHARS", "600")),
+        retrieval_chunk_overlap_chars=int(
+            os.getenv("RESEARCHOS_RETRIEVAL_CHUNK_OVERLAP_CHARS", "0")
+        ),
         workflow_engine=os.getenv("RESEARCHOS_WORKFLOW_ENGINE", "sequential"),
         basic_model=os.getenv("BASIC_MODEL", ""),
         basic_base_url=os.getenv("BASIC_BASE_URL", ""),

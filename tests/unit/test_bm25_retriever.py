@@ -42,3 +42,13 @@ def test_bm25_retriever_returns_no_chunks_without_overlap():
 def test_build_retriever_selects_supported_strategies():
     assert build_retriever("keyword").__class__.__name__ == "LocalKeywordRetriever"
     assert build_retriever("bm25").__class__.__name__ == "BM25Retriever"
+
+
+def test_build_retriever_passes_chunking_configuration():
+    keyword = build_retriever("keyword", max_chunk_chars=320, chunk_overlap_chars=40)
+    bm25 = build_retriever("bm25", max_chunk_chars=320, chunk_overlap_chars=40)
+
+    assert keyword.max_chunk_chars == 320
+    assert keyword.chunk_overlap_chars == 40
+    assert bm25.max_chunk_chars == 320
+    assert bm25.chunk_overlap_chars == 40
