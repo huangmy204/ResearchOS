@@ -66,8 +66,9 @@
 31. Local corpus ingestion、本地语料接入与 manifest 追踪。
 32. Corpus API、资料库可见性与系统主线分层。
 33. Corpus 写入 API、路径安全与资料入库闭环。
-34. LangGraph checkpoint 与复杂编排。
-35. Docker 沙箱与部署。
+34. 手动端到端 demo、Corpus 到 Research Run 的完整链路。
+35. LangGraph checkpoint 与复杂编排。
+36. Docker 沙箱与部署。
 
 ## 文档目录
 
