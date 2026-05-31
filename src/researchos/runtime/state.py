@@ -13,6 +13,9 @@ from researchos.retrieval import RetrievedChunk
 class WorkflowState:
     run: ResearchRun
     plan: list[dict] = field(default_factory=list)
+    retrieval_query: str | None = None
+    query_rewrites: list[dict] = field(default_factory=list)
+    retrieval_retry_count: int = 0
     retrieved_chunks: list[RetrievedChunk] = field(default_factory=list)
     retrieved_chunk: RetrievedChunk | None = None
     retrieval_quality: dict = field(default_factory=dict)

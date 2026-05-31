@@ -177,6 +177,8 @@ def build_retrieval_dimension(diagnostics: dict[str, Any] | None) -> dict:
         "score_type": diagnostics.get("score_type"),
         "candidate_limit": diagnostics.get("candidate_limit"),
         "top_k": diagnostics.get("top_k"),
+        "retry_count": diagnostics.get("retry_count", 0),
+        "query_rewrites": diagnostics.get("query_rewrites", []),
         "chunking": diagnostics.get("chunking", {}),
         "reranker": diagnostics.get("reranker", {}),
         "source_diversity": diagnostics.get("source_diversity", {}),

@@ -4,6 +4,7 @@ from researchos.retrieval.diversity import SourceDiversityPolicy
 from researchos.retrieval.embedding import DeterministicHashEmbeddingModel, EmbeddingRetriever
 from researchos.retrieval.factory import build_retriever
 from researchos.retrieval.local_text import LocalKeywordRetriever, retrieve_local_text
+from researchos.retrieval.query_rewrite import QueryRewriter, RuleBasedQueryRewriter
 from researchos.retrieval.rerank import NoopReranker, Reranker, TermOverlapReranker, build_reranker
 
 __all__ = [
@@ -12,9 +13,11 @@ __all__ = [
     "EmbeddingRetriever",
     "LocalKeywordRetriever",
     "NoopReranker",
+    "QueryRewriter",
     "RetrievedChunk",
     "Reranker",
     "Retriever",
+    "RuleBasedQueryRewriter",
     "SourceDiversityPolicy",
     "TermOverlapReranker",
     "build_reranker",

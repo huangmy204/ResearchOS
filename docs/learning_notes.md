@@ -61,8 +61,9 @@
 26. Source diversity 与多来源证据控制。
 27. Retrieval evaluation、RAG 指标与质量诊断。
 28. Retrieval quality gate 与 agentic workflow 分支。
-29. LangGraph checkpoint 与复杂编排。
-30. Docker 沙箱与部署。
+29. Query rewrite、检索重试与 agentic feedback loop。
+30. LangGraph checkpoint 与复杂编排。
+31. Docker 沙箱与部署。
 
 ## 文档目录
 

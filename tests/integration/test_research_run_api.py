@@ -500,6 +500,14 @@ def test_langgraph_workflow_branches_when_retrieval_has_no_evidence(tmp_path):
         run_id = response.json()["run_id"]
         run = _wait_for_run_completion(client, run_id)
         trace = client.get(f"/v1/research-runs/{run_id}/trace").json()
+        query_rewrite = client.get(
+            f"/v1/research-runs/{run_id}/artifacts/content",
+            params={"path": "plans/query_rewrite.json"},
+        ).json()
+        diagnostics = client.get(
+            f"/v1/research-runs/{run_id}/artifacts/content",
+            params={"path": "sources/retrieval_diagnostics.json"},
+        ).json()
         report_json = client.get(
             f"/v1/research-runs/{run_id}/artifacts/content",
             params={"path": "outputs/report.json"},
@@ -513,10 +521,16 @@ def test_langgraph_workflow_branches_when_retrieval_has_no_evidence(tmp_path):
     assert trace["summary"]["node_names"] == [
         "planning",
         "retrieval",
+        "query_rewrite",
+        "retrieval",
         "insufficient_evidence_report",
         "evaluation",
         "completion",
     ]
+    assert query_rewrite["rewrites"][0]["failed_query"] == "unavailable private market memo"
+    assert diagnostics["retry_count"] == 1
+    assert diagnostics["quality_gate"]["passed"] is False
+    assert diagnostics["quality_gate"]["retrieved_count"] == 0
     assert report_json["generation"]["mode"] == "insufficient_evidence"
     assert report_json["claims"] == []
     assert eval_result["verdict"] == "needs_evidence"
@@ -561,6 +575,10 @@ def test_langgraph_workflow_branches_when_retrieval_quality_gate_fails(tmp_path)
             f"/v1/research-runs/{run_id}/artifacts/content",
             params={"path": "sources/retrieval_diagnostics.json"},
         ).json()
+        query_rewrite = client.get(
+            f"/v1/research-runs/{run_id}/artifacts/content",
+            params={"path": "plans/query_rewrite.json"},
+        ).json()
         report_json = client.get(
             f"/v1/research-runs/{run_id}/artifacts/content",
             params={"path": "outputs/report.json"},
@@ -574,15 +592,92 @@ def test_langgraph_workflow_branches_when_retrieval_quality_gate_fails(tmp_path)
     assert trace["summary"]["node_names"] == [
         "planning",
         "retrieval",
+        "query_rewrite",
+        "retrieval",
         "insufficient_evidence_report",
         "evaluation",
         "completion",
     ]
+    assert query_rewrite["rewrites"][0]["failed_query"] == "legal citation risk"
+    assert diagnostics["retry_count"] == 1
+    assert diagnostics["query_rewrites"][0]["attempt"] == 1
     assert diagnostics["quality_gate"]["passed"] is False
     assert diagnostics["quality_gate"]["min_evidence_count"] == 2
+    assert diagnostics["quality_gate"]["retrieved_count"] == 1
     assert report_json["generation"]["mode"] == "insufficient_evidence"
     assert report_json["retrieval_quality"]["reason"] == "retrieved_count_below_minimum:1<2"
     assert eval_result["metrics"]["retrieval_quality_gate_passed"] == 0.0
+    assert eval_result["dimensions"]["retrieval"]["retry_count"] == 1
+
+
+def test_langgraph_workflow_rewrites_query_after_failed_retrieval(tmp_path):
+    app = create_app(
+        Settings(
+            env="test",
+            workspace_root=tmp_path / "workspace",
+            runtime_profile="test",
+            log_level="INFO",
+            api_host="127.0.0.1",
+            api_port=8000,
+            cors_allow_origins=[],
+            workflow_engine="langgraph",
+        )
+    )
+    app.state.services.workflow.step_delay_sec = 0
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/research-runs",
+            json={
+                "session_id": "session",
+                "query": "case law hallucination",
+                "documents": [
+                    {
+                        "title": "Legal AI memo",
+                        "text": (
+                            "Unsupported citations create legal research risk. "
+                            "Citation verification reduces evidence risk."
+                        ),
+                    }
+                ],
+            },
+        )
+        run_id = response.json()["run_id"]
+        run = _wait_for_run_completion(client, run_id)
+        trace = client.get(f"/v1/research-runs/{run_id}/trace").json()
+        rewrite = client.get(
+            f"/v1/research-runs/{run_id}/artifacts/content",
+            params={"path": "plans/query_rewrite.json"},
+        ).json()
+        diagnostics = client.get(
+            f"/v1/research-runs/{run_id}/artifacts/content",
+            params={"path": "sources/retrieval_diagnostics.json"},
+        ).json()
+        eval_result = client.get(
+            f"/v1/research-runs/{run_id}/artifacts/content",
+            params={"path": "evals/eval_result.json"},
+        ).json()
+
+    assert run["status"] == "completed"
+    assert trace["summary"]["node_names"] == [
+        "planning",
+        "retrieval",
+        "query_rewrite",
+        "retrieval",
+        "reading",
+        "evidence_extraction",
+        "verification",
+        "report_writing",
+        "evaluation",
+        "completion",
+    ]
+    assert rewrite["rewrites"][0]["failed_query"] == "case law hallucination"
+    assert "citation" in rewrite["rewrites"][0]["rewritten_query"]
+    assert diagnostics["retry_count"] == 1
+    assert diagnostics["query"] != diagnostics["original_query"]
+    assert diagnostics["quality_gate"]["passed"] is True
+    assert eval_result["metrics"]["retrieval_quality_gate_passed"] == 1.0
+    assert eval_result["dimensions"]["retrieval"]["retry_count"] == 1
 
 
 def test_research_run_can_write_report_with_llm_writer(tmp_path):

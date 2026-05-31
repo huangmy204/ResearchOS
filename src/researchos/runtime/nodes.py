@@ -8,9 +8,11 @@ from researchos.planning import ResearchPlanner
 from researchos.reporting import ReportDraft, ReportWriter
 from researchos.retrieval import (
     NoopReranker,
+    QueryRewriter,
     Reranker,
     RetrievedChunk,
     Retriever,
+    RuleBasedQueryRewriter,
     SourceDiversityPolicy,
 )
 from researchos.runtime.state import NodeResult, WorkflowState
@@ -63,13 +65,14 @@ class RetrievalNode:
 
     def execute(self, state: WorkflowState) -> NodeResult:
         candidate_limit = max(self.candidate_limit, self.top_k)
+        retrieval_query = state.retrieval_query or state.run.query
         candidates = self.retriever.retrieve(
-            state.run.query,
+            retrieval_query,
             state.run.documents,
             limit=candidate_limit,
         )
         reranked_candidates = self.reranker.rerank(
-            state.run.query,
+            retrieval_query,
             candidates,
             limit=candidate_limit,
         )
@@ -97,6 +100,7 @@ class RetrievalNode:
             candidate_limit=candidate_limit,
             top_k=self.top_k,
             quality_gate=state.retrieval_quality,
+            query=retrieval_query,
         )
         self.artifact_store.write_json(
             state.run,
@@ -116,6 +120,53 @@ class RetrievalNode:
                 "sources": [source.model_dump(mode="json") for source in state.sources],
             },
             artifacts=["sources/retrieval_diagnostics.json"],
+        )
+
+
+class QueryRewriteNode:
+    name = "query_rewrite"
+
+    def __init__(
+        self,
+        artifact_store: ArtifactStore,
+        query_rewriter: QueryRewriter | None = None,
+    ):
+        self.artifact_store = artifact_store
+        self.query_rewriter = query_rewriter or RuleBasedQueryRewriter()
+
+    def execute(self, state: WorkflowState) -> NodeResult:
+        failed_query = state.retrieval_query or state.run.query
+        rewritten_query = self.query_rewriter.rewrite(state.run, failed_query=failed_query)
+        state.retrieval_retry_count += 1
+        state.retrieval_query = rewritten_query
+        rewrite = {
+            "attempt": state.retrieval_retry_count,
+            "rewriter": self.query_rewriter.name,
+            "failed_query": failed_query,
+            "rewritten_query": rewritten_query,
+            "previous_quality": state.retrieval_quality,
+        }
+        state.query_rewrites.append(rewrite)
+        self.artifact_store.write_json(
+            state.run,
+            "plans/query_rewrite.json",
+            {
+                "run_id": state.run.run_id,
+                "rewrites": state.query_rewrites,
+            },
+        )
+        return NodeResult(
+            node_name=self.name,
+            status="searching",
+            step_name="rewriting retrieval query",
+            completed_steps=1,
+            event_type="query.rewritten",
+            payload={
+                "run_id": state.run.run_id,
+                "attempt": state.retrieval_retry_count,
+                "rewritten_query": rewritten_query,
+            },
+            artifacts=["plans/query_rewrite.json"],
         )
 
 
@@ -455,10 +506,14 @@ def _build_retrieval_diagnostics(
     candidate_limit: int,
     top_k: int,
     quality_gate: dict,
+    query: str,
 ) -> dict:
     return {
         "run_id": state.run.run_id,
-        "query": state.run.query,
+        "query": query,
+        "original_query": state.run.query,
+        "query_rewrites": state.query_rewrites,
+        "retry_count": state.retrieval_retry_count,
         "strategy": getattr(retriever, "strategy_name", retriever.__class__.__name__),
         "score_type": getattr(retriever, "score_type", "unknown"),
         "candidate_limit": candidate_limit,

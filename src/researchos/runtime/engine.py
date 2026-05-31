@@ -8,7 +8,7 @@ from typing import Any, Protocol
 from langgraph.graph import END, START, StateGraph
 
 from researchos.models.run import ResearchRun
-from researchos.runtime.nodes import InsufficientEvidenceReportNode
+from researchos.runtime.nodes import InsufficientEvidenceReportNode, QueryRewriteNode
 from researchos.runtime.state import NodeResult, WorkflowNode, WorkflowState
 from researchos.stores.artifact_store import ArtifactStore
 from researchos.stores.event_store import EventStore
@@ -149,7 +149,9 @@ class LangGraphWorkflowEngine(SequentialWorkflowEngine):
     ) -> list[dict]:
         self._assert_branch_nodes_available(nodes)
         insufficient_node = InsufficientEvidenceReportNode(self.artifact_store)
+        query_rewrite_node = QueryRewriteNode(self.artifact_store)
         graph.add_node(insufficient_node.name, self._build_graph_node(insufficient_node))
+        graph.add_node(query_rewrite_node.name, self._build_graph_node(query_rewrite_node))
 
         graph.add_edge(START, "planning")
         graph.add_edge("planning", "retrieval")
@@ -158,9 +160,11 @@ class LangGraphWorkflowEngine(SequentialWorkflowEngine):
             self._route_after_retrieval,
             {
                 "has_evidence": "reading",
+                "retry_query": query_rewrite_node.name,
                 "insufficient_evidence": insufficient_node.name,
             },
         )
+        graph.add_edge(query_rewrite_node.name, "retrieval")
         graph.add_edge("reading", "evidence_extraction")
         graph.add_edge("evidence_extraction", "verification")
         graph.add_edge("verification", "report_writing")
@@ -187,9 +191,12 @@ class LangGraphWorkflowEngine(SequentialWorkflowEngine):
 
     def _route_after_retrieval(self, graph_state: dict[str, Any]) -> str:
         workflow_state = graph_state["workflow_state"]
+        quality_failed = workflow_state.retrieval_quality.get("passed") is False
+        if quality_failed and workflow_state.retrieval_retry_count < 1:
+            return "retry_query"
         if workflow_state.retrieved_chunk is None:
             return "insufficient_evidence"
-        if workflow_state.retrieval_quality.get("passed") is False:
+        if quality_failed:
             return "insufficient_evidence"
         return "has_evidence"
 

@@ -13,6 +13,7 @@ ARTIFACT_TYPES = {
     "outputs/report.json": ("report_json", "application/json"),
     "outputs/executive_summary.md": ("executive_summary", "text/markdown"),
     "plans/research_plan.json": ("research_plan", "application/json"),
+    "plans/query_rewrite.json": ("query_rewrite", "application/json"),
     "evidence/sources.json": ("sources", "application/json"),
     "evidence/evidence.json": ("evidence", "application/json"),
     "evidence/claims.json": ("claims", "application/json"),
