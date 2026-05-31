@@ -3,6 +3,8 @@ from researchos.models.corpus import (
     CorpusDocumentCreate,
     CorpusDocumentResponse,
     CorpusFile,
+    CorpusIndexEntry,
+    CorpusIndexResponse,
     CorpusListResponse,
 )
 from researchos.models.event import ResearchEvent, ResearchEventListResponse
@@ -33,6 +35,8 @@ __all__ = [
     "CorpusDocumentCreate",
     "CorpusDocumentResponse",
     "CorpusListResponse",
+    "CorpusIndexEntry",
+    "CorpusIndexResponse",
     "Evidence",
     "EvidenceBundleResponse",
     "EvidenceGraph",

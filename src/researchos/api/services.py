@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from researchos.config import Settings
-from researchos.ingestion import LocalCorpusLoader
+from researchos.ingestion import LocalCorpusIndex, LocalCorpusLoader
 from researchos.llm import LLMClient, MockLLMClient, OpenAICompatibleLLMClient
 from researchos.models_router import ModelRouter
 from researchos.planning import LLMResearchPlanner, ResearchPlanner, StaticResearchPlanner
@@ -28,6 +28,7 @@ class AppServices:
     event_store: EventStore
     artifact_store: ArtifactStore
     corpus_loader: LocalCorpusLoader
+    corpus_index: LocalCorpusIndex
     model_router: ModelRouter
     llm_client: LLMClient
     workflow: ResearchWorkflow
@@ -39,7 +40,9 @@ def build_services(settings: Settings) -> AppServices:
     run_store = RunStore(workspace)
     event_store = EventStore(workspace)
     artifact_store = ArtifactStore(workspace)
-    corpus_loader = LocalCorpusLoader(settings.corpus_root or workspace.root / "corpus")
+    corpus_root = settings.corpus_root or workspace.root / "corpus"
+    corpus_loader = LocalCorpusLoader(corpus_root)
+    corpus_index = LocalCorpusIndex(corpus_root)
     model_router = ModelRouter(settings)
     llm_client = build_llm_client(settings)
     research_planner = build_research_planner(settings, model_router, llm_client)
@@ -74,6 +77,7 @@ def build_services(settings: Settings) -> AppServices:
         event_store=event_store,
         artifact_store=artifact_store,
         corpus_loader=corpus_loader,
+        corpus_index=corpus_index,
         model_router=model_router,
         llm_client=llm_client,
         workflow=workflow,

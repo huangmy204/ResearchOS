@@ -528,6 +528,43 @@ def test_corpus_api_rejects_duplicate_document_without_overwrite(tmp_path):
     assert "Second version." in overwritten.json()["text"]
 
 
+def test_corpus_api_can_build_and_read_index_manifest(tmp_path):
+    workspace_root = tmp_path / "workspace"
+    corpus_root = workspace_root / "corpus"
+    app = create_app(
+        Settings(
+            env="test",
+            workspace_root=workspace_root,
+            corpus_root=corpus_root,
+            runtime_profile="test",
+            log_level="INFO",
+            api_host="127.0.0.1",
+            api_port=8000,
+            cors_allow_origins=[],
+        )
+    )
+
+    with TestClient(app) as client:
+        empty = client.get("/v1/corpus/index")
+        client.post(
+            "/v1/corpus/documents",
+            json={
+                "title": "Legal Citation Risk",
+                "text": "Unsupported citations create legal research risk.",
+            },
+        )
+        built = client.post("/v1/corpus/index")
+        loaded = client.get("/v1/corpus/index")
+
+    assert empty.status_code == 200
+    assert empty.json()["document_count"] == 0
+    assert built.status_code == 200
+    assert built.json()["document_count"] == 1
+    assert built.json()["entries"][0]["path"] == "legal-citation-risk.md"
+    assert len(built.json()["entries"][0]["content_sha256"]) == 64
+    assert loaded.json() == built.json()
+
+
 def test_research_run_builds_top_k_evidence_bundle(tmp_path):
     app = create_app(
         Settings(

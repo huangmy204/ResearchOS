@@ -28,3 +28,21 @@ class CorpusDocumentResponse(BaseModel):
     text: str
     size_bytes: int
     suffix: str
+
+
+class CorpusIndexEntry(BaseModel):
+    path: str
+    title: str
+    size_bytes: int
+    suffix: str
+    modified_at: str
+    content_sha256: str
+    status: str
+
+
+class CorpusIndexResponse(BaseModel):
+    version: int
+    corpus_root: str
+    indexed_at: str | None
+    document_count: int
+    entries: list[CorpusIndexEntry]

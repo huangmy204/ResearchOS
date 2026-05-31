@@ -10,6 +10,7 @@ from researchos.models.corpus import (
     CorpusDocumentCreate,
     CorpusDocumentResponse,
     CorpusFile,
+    CorpusIndexResponse,
     CorpusListResponse,
 )
 
@@ -71,6 +72,20 @@ def create_corpus_document(
     return _document_response(document)
 
 
+@router.get("/index", response_model=CorpusIndexResponse)
+def get_corpus_index(
+    services: Annotated[AppServices, Depends(get_services)],
+) -> CorpusIndexResponse:
+    return _index_response(services.corpus_index.read())
+
+
+@router.post("/index", response_model=CorpusIndexResponse)
+def build_corpus_index(
+    services: Annotated[AppServices, Depends(get_services)],
+) -> CorpusIndexResponse:
+    return _index_response(services.corpus_index.build())
+
+
 def _document_response(document) -> CorpusDocumentResponse:
     return CorpusDocumentResponse(
         path=document.path,
@@ -78,4 +93,25 @@ def _document_response(document) -> CorpusDocumentResponse:
         text=document.text,
         size_bytes=document.size_bytes,
         suffix=document.suffix,
+    )
+
+
+def _index_response(manifest) -> CorpusIndexResponse:
+    return CorpusIndexResponse(
+        version=manifest.version,
+        corpus_root=manifest.corpus_root,
+        indexed_at=manifest.indexed_at,
+        document_count=manifest.document_count,
+        entries=[
+            {
+                "path": entry.path,
+                "title": entry.title,
+                "size_bytes": entry.size_bytes,
+                "suffix": entry.suffix,
+                "modified_at": entry.modified_at,
+                "content_sha256": entry.content_sha256,
+                "status": entry.status,
+            }
+            for entry in manifest.entries
+        ],
     )

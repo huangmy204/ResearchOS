@@ -67,8 +67,9 @@
 32. Corpus API、资料库可见性与系统主线分层。
 33. Corpus 写入 API、路径安全与资料入库闭环。
 34. 手动端到端 demo、Corpus 到 Research Run 的完整链路。
-35. LangGraph checkpoint 与复杂编排。
-36. Docker 沙箱与部署。
+35. Corpus index manifest、文件 hash 与增量索引前置设计。
+36. LangGraph checkpoint 与复杂编排。
+37. Docker 沙箱与部署。
 
 ## 文档目录
 
