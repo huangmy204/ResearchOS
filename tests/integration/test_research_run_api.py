@@ -772,6 +772,63 @@ def test_research_run_can_use_embedding_retrieval_strategy(tmp_path):
     assert diagnostics["results"][0]["title"] == "Citation risk memo"
 
 
+def test_research_run_can_use_term_overlap_reranker(tmp_path):
+    app = create_app(
+        Settings(
+            env="test",
+            workspace_root=tmp_path / "workspace",
+            runtime_profile="test",
+            log_level="INFO",
+            api_host="127.0.0.1",
+            api_port=8000,
+            cors_allow_origins=[],
+            retrieval_top_k=2,
+            retrieval_candidate_limit=4,
+            retrieval_reranker="term_overlap",
+        )
+    )
+    app.state.services.workflow.step_delay_sec = 0
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/research-runs",
+            json={
+                "session_id": "session",
+                "query": "legal citation risk",
+                "documents": [
+                    {
+                        "title": "Citation risk memo",
+                        "text": "Legal citation risk requires citation verification.",
+                    },
+                    {
+                        "title": "Legal research memo",
+                        "text": "Legal research workflows need evidence tracking.",
+                    },
+                    {
+                        "title": "Cooking note",
+                        "text": "Bread fermentation uses flour water salt.",
+                    },
+                ],
+            },
+        )
+        run_id = response.json()["run_id"]
+        _wait_for_run_completion(client, run_id)
+
+        diagnostics = client.get(
+            f"/v1/research-runs/{run_id}/artifacts/content",
+            params={"path": "sources/retrieval_diagnostics.json"},
+        ).json()
+        bundle = client.get(f"/v1/research-runs/{run_id}/evidence").json()
+
+    assert app.state.services.workflow.reranker.__class__.__name__ == "TermOverlapReranker"
+    assert diagnostics["top_k"] == 2
+    assert diagnostics["candidate_limit"] == 4
+    assert diagnostics["reranker"]["name"] == "term_overlap"
+    assert diagnostics["reranker"]["applied"] is True
+    assert diagnostics["retrieved_count"] == 2
+    assert len(bundle["evidence"]) == 2
+
+
 def test_evidence_api_returns_bundle_and_graph(tmp_path):
     app = create_app(
         Settings(

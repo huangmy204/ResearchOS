@@ -7,6 +7,7 @@ from researchos.llm import LLMClient, MockLLMClient, OpenAICompatibleLLMClient
 from researchos.models_router import ModelRouter
 from researchos.planning import LLMResearchPlanner, ResearchPlanner, StaticResearchPlanner
 from researchos.reporting import EvidenceReportWriter, LLMReportWriter, ReportWriter
+from researchos.retrieval import build_reranker
 from researchos.retrieval.factory import build_retriever
 from researchos.runtime import (
     LangGraphWorkflowEngine,
@@ -51,6 +52,9 @@ def build_services(settings: Settings) -> AppServices:
             max_chunk_chars=settings.retrieval_chunk_chars,
             chunk_overlap_chars=settings.retrieval_chunk_overlap_chars,
         ),
+        reranker=build_reranker(settings.retrieval_reranker),
+        retrieval_top_k=settings.retrieval_top_k,
+        retrieval_candidate_limit=settings.retrieval_candidate_limit,
         research_planner=research_planner,
         report_writer=report_writer,
         citation_verifier=citation_verifier,

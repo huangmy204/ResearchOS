@@ -13,6 +13,9 @@ def test_load_local_env_reads_key_value_pairs(tmp_path, monkeypatch):
                 "RESEARCHOS_WORKFLOW_ENGINE=langgraph",
                 "RESEARCHOS_RETRIEVAL_CHUNK_CHARS=900",
                 "RESEARCHOS_RETRIEVAL_CHUNK_OVERLAP_CHARS=120",
+                "RESEARCHOS_RETRIEVAL_TOP_K=4",
+                "RESEARCHOS_RETRIEVAL_CANDIDATE_LIMIT=8",
+                "RESEARCHOS_RETRIEVAL_RERANKER=term_overlap",
                 "WRITER_MODEL='qwen-plus'",
                 'WRITER_BASE_URL="https://dashscope.aliyuncs.com/compatible-mode/v1"',
             ]
@@ -24,6 +27,9 @@ def test_load_local_env_reads_key_value_pairs(tmp_path, monkeypatch):
     monkeypatch.delenv("RESEARCHOS_WORKFLOW_ENGINE", raising=False)
     monkeypatch.delenv("RESEARCHOS_RETRIEVAL_CHUNK_CHARS", raising=False)
     monkeypatch.delenv("RESEARCHOS_RETRIEVAL_CHUNK_OVERLAP_CHARS", raising=False)
+    monkeypatch.delenv("RESEARCHOS_RETRIEVAL_TOP_K", raising=False)
+    monkeypatch.delenv("RESEARCHOS_RETRIEVAL_CANDIDATE_LIMIT", raising=False)
+    monkeypatch.delenv("RESEARCHOS_RETRIEVAL_RERANKER", raising=False)
     monkeypatch.delenv("WRITER_MODEL", raising=False)
     monkeypatch.delenv("WRITER_BASE_URL", raising=False)
 
@@ -34,6 +40,9 @@ def test_load_local_env_reads_key_value_pairs(tmp_path, monkeypatch):
     assert get_settings().workflow_engine == "langgraph"
     assert get_settings().retrieval_chunk_chars == 900
     assert get_settings().retrieval_chunk_overlap_chars == 120
+    assert get_settings().retrieval_top_k == 4
+    assert get_settings().retrieval_candidate_limit == 8
+    assert get_settings().retrieval_reranker == "term_overlap"
     assert get_settings().writer_model == "qwen-plus"
     assert get_settings().writer_base_url == "https://dashscope.aliyuncs.com/compatible-mode/v1"
 

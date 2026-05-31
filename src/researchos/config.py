@@ -17,6 +17,9 @@ class Settings:
     retrieval_strategy: str = "keyword"
     retrieval_chunk_chars: int = 600
     retrieval_chunk_overlap_chars: int = 0
+    retrieval_top_k: int = 3
+    retrieval_candidate_limit: int = 6
+    retrieval_reranker: str = "none"
     workflow_engine: str = "sequential"
     basic_model: str = ""
     basic_base_url: str = ""
@@ -65,6 +68,9 @@ def get_settings() -> Settings:
         retrieval_chunk_overlap_chars=int(
             os.getenv("RESEARCHOS_RETRIEVAL_CHUNK_OVERLAP_CHARS", "0")
         ),
+        retrieval_top_k=int(os.getenv("RESEARCHOS_RETRIEVAL_TOP_K", "3")),
+        retrieval_candidate_limit=int(os.getenv("RESEARCHOS_RETRIEVAL_CANDIDATE_LIMIT", "6")),
+        retrieval_reranker=os.getenv("RESEARCHOS_RETRIEVAL_RERANKER", "none"),
         workflow_engine=os.getenv("RESEARCHOS_WORKFLOW_ENGINE", "sequential"),
         basic_model=os.getenv("BASIC_MODEL", ""),
         basic_base_url=os.getenv("BASIC_BASE_URL", ""),

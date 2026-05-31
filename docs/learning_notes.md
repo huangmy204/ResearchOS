@@ -57,8 +57,9 @@
 22. RAG chunk 切分参数、overlap 与召回质量。
 23. Embedding Retriever、向量表示与 cosine similarity。
 24. Retrieval diagnostics、检索策略对比与可观察性。
-25. LangGraph checkpoint 与复杂编排。
-26. Docker 沙箱与部署。
+25. RAG reranker、候选召回与二次排序。
+26. LangGraph checkpoint 与复杂编排。
+27. Docker 沙箱与部署。
 
 ## 文档目录
 

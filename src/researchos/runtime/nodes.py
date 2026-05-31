@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from researchos.models.evidence import CitationVerification, Claim, Evidence, Source
 from researchos.planning import ResearchPlanner
 from researchos.reporting import ReportDraft, ReportWriter
-from researchos.retrieval import RetrievedChunk, Retriever
+from researchos.retrieval import NoopReranker, Reranker, RetrievedChunk, Retriever
 from researchos.runtime.state import NodeResult, WorkflowState
 from researchos.stores.artifact_store import ArtifactStore
 from researchos.verification import CitationVerifier
@@ -35,13 +35,29 @@ class PlanningNode:
 class RetrievalNode:
     name = "retrieval"
 
-    def __init__(self, retriever: Retriever, artifact_store: ArtifactStore):
+    def __init__(
+        self,
+        retriever: Retriever,
+        artifact_store: ArtifactStore,
+        *,
+        reranker: Reranker | None = None,
+        top_k: int = 3,
+        candidate_limit: int = 6,
+    ):
         self.retriever = retriever
         self.artifact_store = artifact_store
+        self.reranker = reranker or NoopReranker()
+        self.top_k = top_k
+        self.candidate_limit = candidate_limit
 
     def execute(self, state: WorkflowState) -> NodeResult:
-        limit = 3
-        chunks = self.retriever.retrieve(state.run.query, state.run.documents, limit=limit)
+        candidate_limit = max(self.candidate_limit, self.top_k)
+        candidates = self.retriever.retrieve(
+            state.run.query,
+            state.run.documents,
+            limit=candidate_limit,
+        )
+        chunks = self.reranker.rerank(state.run.query, candidates, limit=self.top_k)
         state.retrieved_chunks = chunks
         state.retrieved_chunk = chunks[0] if chunks else None
         state.sources = (
@@ -53,8 +69,11 @@ class RetrievalNode:
         diagnostics = _build_retrieval_diagnostics(
             state,
             self.retriever,
+            self.reranker,
+            candidates,
             chunks,
-            limit=limit,
+            candidate_limit=candidate_limit,
+            top_k=self.top_k,
         )
         self.artifact_store.write_json(
             state.run,
@@ -408,34 +427,56 @@ def write_evidence_artifacts(
 def _build_retrieval_diagnostics(
     state: WorkflowState,
     retriever: Retriever,
+    reranker: Reranker,
+    candidates: list[RetrievedChunk],
     chunks: list[RetrievedChunk],
     *,
-    limit: int,
+    candidate_limit: int,
+    top_k: int,
 ) -> dict:
     return {
         "run_id": state.run.run_id,
         "query": state.run.query,
         "strategy": getattr(retriever, "strategy_name", retriever.__class__.__name__),
         "score_type": getattr(retriever, "score_type", "unknown"),
-        "limit": limit,
+        "candidate_limit": candidate_limit,
+        "top_k": top_k,
         "document_count": len(state.run.documents),
+        "candidate_count": len(candidates),
         "retrieved_count": len(chunks),
+        "reranker": {
+            "name": getattr(reranker, "name", reranker.__class__.__name__),
+            "score_type": getattr(reranker, "score_type", "unknown"),
+            "applied": getattr(reranker, "name", "") != "none",
+        },
         "chunking": {
             "max_chunk_chars": getattr(retriever, "max_chunk_chars", None),
             "chunk_overlap_chars": getattr(retriever, "chunk_overlap_chars", None),
         },
+        "candidates": [
+            _retrieval_diagnostic_result(candidate, retriever, index)
+            for index, candidate in enumerate(candidates)
+        ],
         "results": [
-            {
-                "rank": index + 1,
-                "document_index": chunk.document_index,
-                "title": chunk.title,
-                "score": chunk.score,
-                "score_type": getattr(retriever, "score_type", "unknown"),
-                "text_chars": len(chunk.text),
-                "url": chunk.url,
-            }
+            _retrieval_diagnostic_result(chunk, retriever, index)
             for index, chunk in enumerate(chunks)
         ],
+    }
+
+
+def _retrieval_diagnostic_result(
+    chunk: RetrievedChunk,
+    retriever: Retriever,
+    index: int,
+) -> dict:
+    return {
+        "rank": index + 1,
+        "document_index": chunk.document_index,
+        "title": chunk.title,
+        "score": chunk.score,
+        "score_type": getattr(retriever, "score_type", "unknown"),
+        "text_chars": len(chunk.text),
+        "url": chunk.url,
     }
 
 
