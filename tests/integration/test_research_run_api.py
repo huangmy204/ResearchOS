@@ -387,6 +387,52 @@ def test_research_run_can_use_langgraph_workflow_engine(tmp_path):
     ]
 
 
+def test_langgraph_workflow_branches_when_retrieval_has_no_evidence(tmp_path):
+    app = create_app(
+        Settings(
+            env="test",
+            workspace_root=tmp_path / "workspace",
+            runtime_profile="test",
+            log_level="INFO",
+            api_host="127.0.0.1",
+            api_port=8000,
+            cors_allow_origins=[],
+            workflow_engine="langgraph",
+        )
+    )
+    app.state.services.workflow.step_delay_sec = 0
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/research-runs",
+            json={"session_id": "session", "query": "unavailable private market memo"},
+        )
+        run_id = response.json()["run_id"]
+        run = _wait_for_run_completion(client, run_id)
+        trace = client.get(f"/v1/research-runs/{run_id}/trace").json()
+        report_json = client.get(
+            f"/v1/research-runs/{run_id}/artifacts/content",
+            params={"path": "outputs/report.json"},
+        ).json()
+        eval_result = client.get(
+            f"/v1/research-runs/{run_id}/artifacts/content",
+            params={"path": "evals/eval_result.json"},
+        ).json()
+
+    assert run["status"] == "completed"
+    assert trace["summary"]["node_names"] == [
+        "planning",
+        "retrieval",
+        "insufficient_evidence_report",
+        "evaluation",
+        "completion",
+    ]
+    assert report_json["generation"]["mode"] == "insufficient_evidence"
+    assert report_json["claims"] == []
+    assert eval_result["verdict"] == "needs_evidence"
+    assert eval_result["metrics"]["retrieval_recall"] == 0.0
+
+
 def test_research_run_can_write_report_with_llm_writer(tmp_path):
     app = create_app(
         Settings(

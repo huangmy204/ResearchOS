@@ -8,6 +8,7 @@ from typing import Any, Protocol
 from langgraph.graph import END, START, StateGraph
 
 from researchos.models.run import ResearchRun
+from researchos.runtime.nodes import InsufficientEvidenceReportNode
 from researchos.runtime.state import NodeResult, WorkflowNode, WorkflowState
 from researchos.stores.artifact_store import ArtifactStore
 from researchos.stores.event_store import EventStore
@@ -119,6 +120,9 @@ class LangGraphWorkflowEngine(SequentialWorkflowEngine):
         for node in nodes:
             graph.add_node(node.name, self._build_graph_node(node))
 
+        if self._can_build_evidence_branch(nodes):
+            return await self._execute_evidence_branch_graph(state, graph, nodes)
+
         graph.add_edge(START, nodes[0].name)
         for previous, current in zip(nodes, nodes[1:], strict=False):
             graph.add_edge(previous.name, current.name)
@@ -136,6 +140,74 @@ class LangGraphWorkflowEngine(SequentialWorkflowEngine):
             return graph_state
 
         return run_node
+
+    async def _execute_evidence_branch_graph(
+        self,
+        state: WorkflowState,
+        graph: StateGraph,
+        nodes: list[WorkflowNode],
+    ) -> list[dict]:
+        self._assert_branch_nodes_available(nodes)
+        insufficient_node = InsufficientEvidenceReportNode(self.artifact_store)
+        graph.add_node(insufficient_node.name, self._build_graph_node(insufficient_node))
+
+        graph.add_edge(START, "planning")
+        graph.add_edge("planning", "retrieval")
+        graph.add_conditional_edges(
+            "retrieval",
+            self._route_after_retrieval,
+            {
+                "has_evidence": "reading",
+                "insufficient_evidence": insufficient_node.name,
+            },
+        )
+        graph.add_edge("reading", "evidence_extraction")
+        graph.add_edge("evidence_extraction", "verification")
+        graph.add_edge("verification", "report_writing")
+        graph.add_edge("report_writing", "evaluation")
+        graph.add_edge(insufficient_node.name, "evaluation")
+        graph.add_edge("evaluation", END)
+
+        app = graph.compile()
+        result = await app.ainvoke({"workflow_state": state, "trace": []})
+        return result["trace"]
+
+    def _can_build_evidence_branch(self, nodes: list[WorkflowNode]) -> bool:
+        node_names = {node.name for node in nodes}
+        required_names = {
+            "planning",
+            "retrieval",
+            "reading",
+            "evidence_extraction",
+            "verification",
+            "report_writing",
+            "evaluation",
+        }
+        return required_names.issubset(node_names)
+
+    def _route_after_retrieval(self, graph_state: dict[str, Any]) -> str:
+        workflow_state = graph_state["workflow_state"]
+        if workflow_state.retrieved_chunk is None:
+            return "insufficient_evidence"
+        return "has_evidence"
+
+    def _assert_branch_nodes_available(self, nodes: list[WorkflowNode]) -> None:
+        node_names = {node.name for node in nodes}
+        missing = [
+            name
+            for name in [
+                "planning",
+                "retrieval",
+                "reading",
+                "evidence_extraction",
+                "verification",
+                "report_writing",
+                "evaluation",
+            ]
+            if name not in node_names
+        ]
+        if missing:
+            raise RuntimeError(f"LangGraph workflow is missing required nodes: {missing}")
 
 
 def _trace_entry(

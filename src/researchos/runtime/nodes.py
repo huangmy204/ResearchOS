@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 
 from researchos.models.evidence import CitationVerification, Claim, Evidence, Source
 from researchos.planning import ResearchPlanner
-from researchos.reporting import ReportWriter
+from researchos.reporting import ReportDraft, ReportWriter
 from researchos.retrieval import RetrievedChunk, Retriever
 from researchos.runtime.state import NodeResult, WorkflowState
 from researchos.stores.artifact_store import ArtifactStore
@@ -161,6 +161,75 @@ class ReportWritingNode:
         )
 
 
+class InsufficientEvidenceReportNode:
+    name = "insufficient_evidence_report"
+
+    def __init__(self, artifact_store: ArtifactStore):
+        self.artifact_store = artifact_store
+
+    def execute(self, state: WorkflowState) -> NodeResult:
+        markdown = "\n".join(
+            [
+                "# ResearchOS Evidence Gap Report",
+                "",
+                f"Run ID: `{state.run.run_id}`",
+                f"Query: {state.run.query}",
+                "",
+                "## Summary",
+                "",
+                "ResearchOS did not find enough local evidence to produce a grounded answer.",
+                "",
+                "## Evidence Status",
+                "",
+                "- Retrieved evidence chunks: 0",
+                "- Report mode: insufficient evidence",
+                "",
+                "## Next Steps",
+                "",
+                "- Add more relevant local documents.",
+                "- Enable a broader search tool in a future workflow.",
+                "- Re-run the research task after new sources are available.",
+                "",
+            ]
+        )
+        report_json = {
+            "run_id": state.run.run_id,
+            "title": "ResearchOS Evidence Gap Report",
+            "summary": "No supporting evidence was retrieved from the available local documents.",
+            "generation": {"mode": "insufficient_evidence"},
+            "claims": [],
+            "evidence": [],
+            "sources": [],
+            "citations": [],
+            "limitations": [
+                "The workflow did not generate claims because no supporting evidence was found.",
+                "Future versions should broaden retrieval before asking the writer to answer.",
+            ],
+        }
+        executive_summary = "ResearchOS found no sufficient local evidence for this run.\n"
+        state.report = ReportDraft(
+            markdown=markdown,
+            report_json=report_json,
+            executive_summary=executive_summary,
+        )
+        self.artifact_store.write_text(state.run, "outputs/report.md", markdown)
+        self.artifact_store.write_json(state.run, "outputs/report.json", report_json)
+        self.artifact_store.write_text(
+            state.run,
+            "outputs/executive_summary.md",
+            executive_summary,
+        )
+        return NodeResult(
+            node_name=self.name,
+            status="writing",
+            step_name="writing insufficient evidence report",
+            completed_steps=5,
+            event_type="report.insufficient_evidence",
+            payload={"run_id": state.run.run_id, "path": "outputs/report.md"},
+            artifacts=["outputs/report.md", "outputs/report.json", "outputs/executive_summary.md"],
+        )
+
+
 class EvaluationNode:
     name = "evaluation"
 
@@ -168,6 +237,27 @@ class EvaluationNode:
         self.artifact_store = artifact_store
 
     def execute(self, state: WorkflowState) -> NodeResult:
+        has_evidence = state.evidence is not None
+        metrics = (
+            {
+                "retrieval_recall": 1.0,
+                "citation_precision": 1.0,
+                "claim_support_rate": 1.0,
+                "report_completeness": 1.0,
+                "latency_sec": 0.0,
+                "tool_success_rate": 1.0,
+            }
+            if has_evidence
+            else {
+                "retrieval_recall": 0.0,
+                "citation_precision": 0.0,
+                "claim_support_rate": 0.0,
+                "report_completeness": 0.3,
+                "latency_sec": 0.0,
+                "tool_success_rate": 1.0,
+            }
+        )
+        verdict = "pass" if has_evidence else "needs_evidence"
         self.artifact_store.write_json(
             state.run,
             "evals/eval_result.json",
@@ -175,22 +265,15 @@ class EvaluationNode:
                 "eval_run_id": f"eval_{state.run.run_id}",
                 "case_id": "mvp_smoke",
                 "research_run_id": state.run.run_id,
-                "metrics": {
-                    "retrieval_recall": 1.0,
-                    "citation_precision": 1.0,
-                    "claim_support_rate": 1.0,
-                    "report_completeness": 1.0,
-                    "latency_sec": 0.0,
-                    "tool_success_rate": 1.0,
-                },
-                "verdict": "pass",
-                "regression": False,
+                "metrics": metrics,
+                "verdict": verdict,
+                "regression": not has_evidence,
             },
         )
         self.artifact_store.write_text(
             state.run,
             "evals/eval_report.md",
-            "# MVP Smoke Eval\n\nVerdict: pass\n",
+            f"# MVP Smoke Eval\n\nVerdict: {verdict}\n",
         )
         return NodeResult(
             node_name=self.name,
@@ -198,7 +281,7 @@ class EvaluationNode:
             step_name="reviewing completeness",
             completed_steps=6,
             event_type="review.completed",
-            payload={"run_id": state.run.run_id, "quality_score": 1.0},
+            payload={"run_id": state.run.run_id, "quality_score": metrics["report_completeness"]},
             artifacts=["evals/eval_result.json", "evals/eval_report.md"],
         )
 
