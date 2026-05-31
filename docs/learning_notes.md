@@ -42,8 +42,9 @@
 14. LLM planner、结构化计划与 LangGraph 前置设计。
 15. 节点化 workflow、WorkflowState、NodeResult 与 trace。
 16. Workflow Trace API 与可观察性。
-17. LangGraph 工作流。
-18. Docker 沙箱与部署。
+17. WorkflowEngine 抽象与 LangGraph 替换点。
+18. LangGraph 工作流。
+19. Docker 沙箱与部署。
 
 ## 文档目录
 

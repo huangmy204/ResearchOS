@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-import asyncio
 from datetime import UTC, datetime
-from time import perf_counter
 
-from researchos.models.run import ResearchRun
 from researchos.planning import ResearchPlanner, StaticResearchPlanner
 from researchos.reporting import EvidenceReportWriter, ReportWriter
 from researchos.retrieval import LocalKeywordRetriever, Retriever
+from researchos.runtime.engine import SequentialWorkflowEngine, WorkflowCancelled, WorkflowEngine
 from researchos.runtime.nodes import (
     EvaluationNode,
     EvidenceExtractionNode,
@@ -17,15 +15,11 @@ from researchos.runtime.nodes import (
     RetrievalNode,
     VerificationNode,
 )
-from researchos.runtime.state import NodeResult, WorkflowNode, WorkflowState
+from researchos.runtime.state import WorkflowNode, WorkflowState
 from researchos.stores.artifact_store import ArtifactStore
 from researchos.stores.event_store import EventStore
 from researchos.stores.run_store import RunStore
 from researchos.verification import CitationVerifier, RuleBasedCitationVerifier
-
-
-class WorkflowCancelled(Exception):
-    """Raised internally when a run is cancelled while the workflow is active."""
 
 
 class ResearchWorkflow:
@@ -40,6 +34,7 @@ class ResearchWorkflow:
         research_planner: ResearchPlanner | None = None,
         report_writer: ReportWriter | None = None,
         citation_verifier: CitationVerifier | None = None,
+        engine: WorkflowEngine | None = None,
         *,
         step_delay_sec: float = 0.05,
     ):
@@ -50,7 +45,20 @@ class ResearchWorkflow:
         self.research_planner = research_planner or StaticResearchPlanner()
         self.report_writer = report_writer or EvidenceReportWriter()
         self.citation_verifier = citation_verifier or RuleBasedCitationVerifier()
-        self.step_delay_sec = step_delay_sec
+        self.engine = engine or SequentialWorkflowEngine(
+            run_store=run_store,
+            event_store=event_store,
+            artifact_store=artifact_store,
+            step_delay_sec=step_delay_sec,
+        )
+
+    @property
+    def step_delay_sec(self) -> float:
+        return getattr(self.engine, "step_delay_sec", 0.0)
+
+    @step_delay_sec.setter
+    def step_delay_sec(self, value: float) -> None:
+        self.engine.step_delay_sec = value
 
     async def run(self, run_id: str) -> None:
         run = self.run_store.get(run_id)
@@ -62,10 +70,8 @@ class ResearchWorkflow:
         state = WorkflowState(run=run)
         trace: list[dict] = []
         try:
-            for node in self._build_nodes():
-                await self._execute_node(state, node, trace)
+            trace = await self.engine.execute(state, self._build_nodes())
 
-            self._raise_if_cancelled(state.run.run_id)
             state.run = self.run_store.update(
                 state.run.run_id,
                 status="completed",
@@ -94,7 +100,7 @@ class ResearchWorkflow:
                     "artifacts": ["logs/runtime.log"],
                 }
             )
-            self._write_workflow_trace(state.run, trace)
+            self.engine.write_trace(state.run, trace)
         except WorkflowCancelled:
             return
         except Exception as exc:
@@ -121,23 +127,7 @@ class ResearchWorkflow:
                     "error": str(exc),
                 }
             )
-            self._write_workflow_trace(failed, trace)
-
-    async def _execute_node(
-        self,
-        state: WorkflowState,
-        node: WorkflowNode,
-        trace: list[dict],
-    ) -> None:
-        self._raise_if_cancelled(state.run.run_id)
-        started_at = datetime.now(UTC)
-        start = perf_counter()
-        result = node.execute(state)
-        duration_ms = round((perf_counter() - start) * 1000, 2)
-        state.run = await self._advance(state.run, result=result)
-        trace.append(self._trace_entry(result, started_at, duration_ms))
-        self._write_workflow_trace(state.run, trace)
-        await self._pause(state.run.run_id)
+            self.engine.write_trace(failed, trace)
 
     def _build_nodes(self) -> list[WorkflowNode]:
         return [
@@ -149,56 +139,3 @@ class ResearchWorkflow:
             ReportWritingNode(self.artifact_store, self.report_writer),
             EvaluationNode(self.artifact_store),
         ]
-
-    async def _advance(
-        self,
-        run: ResearchRun,
-        *,
-        result: NodeResult,
-    ) -> ResearchRun:
-        current = self.run_store.get(run.run_id)
-        if current and current.status == "cancelled":
-            return current
-        updated = self.run_store.update(
-            run.run_id,
-            status=result.status,
-            current_step=result.step_name,
-            completed_steps=result.completed_steps,
-        )
-        self.event_store.append(updated, result.event_type, result.payload)
-        return updated
-
-    async def _pause(self, run_id: str) -> None:
-        if self.step_delay_sec > 0:
-            await asyncio.sleep(self.step_delay_sec)
-        self._raise_if_cancelled(run_id)
-
-    def _raise_if_cancelled(self, run_id: str) -> None:
-        current = self.run_store.get(run_id)
-        if current and current.status == "cancelled":
-            raise WorkflowCancelled
-
-    def _trace_entry(
-        self,
-        result: NodeResult,
-        started_at: datetime,
-        duration_ms: float,
-    ) -> dict:
-        return {
-            "node": result.node_name,
-            "status": result.status,
-            "step_name": result.step_name,
-            "completed_steps": result.completed_steps,
-            "started_at": started_at.isoformat(),
-            "finished_at": datetime.now(UTC).isoformat(),
-            "duration_ms": duration_ms,
-            "event_type": result.event_type,
-            "artifacts": result.artifacts,
-        }
-
-    def _write_workflow_trace(self, run: ResearchRun, trace: list[dict]) -> None:
-        self.artifact_store.write_json(
-            run,
-            "traces/workflow_trace.json",
-            {"run_id": run.run_id, "nodes": trace},
-        )
