@@ -9,6 +9,9 @@ from researchos.retrieval.local_text import chunk_text, tokenize
 
 
 class BM25Retriever:
+    strategy_name = "bm25"
+    score_type = "bm25"
+
     def __init__(
         self,
         *,

@@ -35,11 +35,13 @@ class PlanningNode:
 class RetrievalNode:
     name = "retrieval"
 
-    def __init__(self, retriever: Retriever):
+    def __init__(self, retriever: Retriever, artifact_store: ArtifactStore):
         self.retriever = retriever
+        self.artifact_store = artifact_store
 
     def execute(self, state: WorkflowState) -> NodeResult:
-        chunks = self.retriever.retrieve(state.run.query, state.run.documents, limit=3)
+        limit = 3
+        chunks = self.retriever.retrieve(state.run.query, state.run.documents, limit=limit)
         state.retrieved_chunks = chunks
         state.retrieved_chunk = chunks[0] if chunks else None
         state.sources = (
@@ -48,6 +50,17 @@ class RetrievalNode:
             else [_build_source(state, None, 0)]
         )
         state.source = state.sources[0]
+        diagnostics = _build_retrieval_diagnostics(
+            state,
+            self.retriever,
+            chunks,
+            limit=limit,
+        )
+        self.artifact_store.write_json(
+            state.run,
+            "sources/retrieval_diagnostics.json",
+            diagnostics,
+        )
         return NodeResult(
             node_name=self.name,
             status="searching",
@@ -57,8 +70,10 @@ class RetrievalNode:
             payload={
                 "run_id": state.run.run_id,
                 "retrieved_count": len(chunks),
+                "strategy": diagnostics["strategy"],
                 "sources": [source.model_dump(mode="json") for source in state.sources],
             },
+            artifacts=["sources/retrieval_diagnostics.json"],
         )
 
 
@@ -388,6 +403,40 @@ def write_evidence_artifacts(
         )
         artifact_paths.append("sources/parsed/retrieval_results.json")
     return artifact_paths
+
+
+def _build_retrieval_diagnostics(
+    state: WorkflowState,
+    retriever: Retriever,
+    chunks: list[RetrievedChunk],
+    *,
+    limit: int,
+) -> dict:
+    return {
+        "run_id": state.run.run_id,
+        "query": state.run.query,
+        "strategy": getattr(retriever, "strategy_name", retriever.__class__.__name__),
+        "score_type": getattr(retriever, "score_type", "unknown"),
+        "limit": limit,
+        "document_count": len(state.run.documents),
+        "retrieved_count": len(chunks),
+        "chunking": {
+            "max_chunk_chars": getattr(retriever, "max_chunk_chars", None),
+            "chunk_overlap_chars": getattr(retriever, "chunk_overlap_chars", None),
+        },
+        "results": [
+            {
+                "rank": index + 1,
+                "document_index": chunk.document_index,
+                "title": chunk.title,
+                "score": chunk.score,
+                "score_type": getattr(retriever, "score_type", "unknown"),
+                "text_chars": len(chunk.text),
+                "url": chunk.url,
+            }
+            for index, chunk in enumerate(chunks)
+        ],
+    }
 
 
 def _build_source(state: WorkflowState, chunk: RetrievedChunk | None, index: int) -> Source:

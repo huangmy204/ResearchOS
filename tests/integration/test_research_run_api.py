@@ -389,6 +389,10 @@ def test_research_run_builds_top_k_evidence_bundle(tmp_path):
             f"/v1/research-runs/{run_id}/artifacts/content",
             params={"path": "sources/parsed/retrieval_results.json"},
         ).json()
+        diagnostics = client.get(
+            f"/v1/research-runs/{run_id}/artifacts/content",
+            params={"path": "sources/retrieval_diagnostics.json"},
+        ).json()
         report = client.get(
             f"/v1/research-runs/{run_id}/artifacts/content",
             params={"path": "outputs/report.md"},
@@ -396,6 +400,11 @@ def test_research_run_builds_top_k_evidence_bundle(tmp_path):
 
     assert len(retrieval_results) == 3
     assert [result["rank"] for result in retrieval_results] == [1, 2, 3]
+    assert diagnostics["strategy"] == "keyword"
+    assert diagnostics["score_type"] == "term_overlap"
+    assert diagnostics["chunking"]["max_chunk_chars"] == 600
+    assert diagnostics["retrieved_count"] == 3
+    assert diagnostics["results"][0]["rank"] == 1
     assert len(bundle["sources"]) == 3
     assert len(bundle["evidence"]) == 3
     assert len(bundle["claims"]) == 3
@@ -750,10 +759,17 @@ def test_research_run_can_use_embedding_retrieval_strategy(tmp_path):
             f"/v1/research-runs/{run_id}/artifacts/content",
             params={"path": "evidence/sources.json"},
         ).json()
+        diagnostics = client.get(
+            f"/v1/research-runs/{run_id}/artifacts/content",
+            params={"path": "sources/retrieval_diagnostics.json"},
+        ).json()
 
     assert app.state.services.settings.retrieval_strategy == "embedding"
     assert app.state.services.workflow.retriever.__class__.__name__ == "EmbeddingRetriever"
     assert sources[0]["title"] == "Citation risk memo"
+    assert diagnostics["strategy"] == "embedding"
+    assert diagnostics["score_type"] == "cosine_similarity"
+    assert diagnostics["results"][0]["title"] == "Citation risk memo"
 
 
 def test_evidence_api_returns_bundle_and_graph(tmp_path):

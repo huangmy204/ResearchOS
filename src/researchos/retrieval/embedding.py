@@ -31,6 +31,9 @@ class DeterministicHashEmbeddingModel:
 
 
 class EmbeddingRetriever:
+    strategy_name = "embedding"
+    score_type = "cosine_similarity"
+
     def __init__(
         self,
         *,

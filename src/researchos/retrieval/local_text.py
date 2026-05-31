@@ -7,6 +7,9 @@ from researchos.retrieval.base import RetrievedChunk
 
 
 class LocalKeywordRetriever:
+    strategy_name = "keyword"
+    score_type = "term_overlap"
+
     def __init__(self, *, max_chunk_chars: int = 600, chunk_overlap_chars: int = 0):
         self.max_chunk_chars = max_chunk_chars
         self.chunk_overlap_chars = chunk_overlap_chars

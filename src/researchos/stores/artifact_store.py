@@ -18,6 +18,7 @@ ARTIFACT_TYPES = {
     "evidence/claims.json": ("claims", "application/json"),
     "evidence/evidence_graph.json": ("evidence_graph", "application/json"),
     "evidence/citation_verification.json": ("citation_verification", "application/json"),
+    "sources/retrieval_diagnostics.json": ("retrieval_diagnostics", "application/json"),
     "sources/parsed/retrieval_results.json": ("retrieval_results", "application/json"),
     "traces/events.jsonl": ("events", "application/x-ndjson"),
     "traces/workflow_trace.json": ("workflow_trace", "application/json"),

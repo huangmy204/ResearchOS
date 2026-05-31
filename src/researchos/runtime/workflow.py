@@ -132,7 +132,7 @@ class ResearchWorkflow:
     def _build_nodes(self) -> list[WorkflowNode]:
         return [
             PlanningNode(self.research_planner, self.artifact_store),
-            RetrievalNode(self.retriever),
+            RetrievalNode(self.retriever, self.artifact_store),
             ReadingNode(),
             EvidenceExtractionNode(),
             VerificationNode(self.citation_verifier),
