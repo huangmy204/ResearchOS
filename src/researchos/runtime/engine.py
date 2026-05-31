@@ -3,7 +3,9 @@ from __future__ import annotations
 import asyncio
 from datetime import UTC, datetime
 from time import perf_counter
-from typing import Protocol
+from typing import Any, Protocol
+
+from langgraph.graph import END, START, StateGraph
 
 from researchos.models.run import ResearchRun
 from researchos.runtime.state import NodeResult, WorkflowNode, WorkflowState
@@ -102,6 +104,38 @@ class SequentialWorkflowEngine:
         current = self.run_store.get(run_id)
         if current and current.status == "cancelled":
             raise WorkflowCancelled
+
+
+class LangGraphWorkflowEngine(SequentialWorkflowEngine):
+    async def execute(
+        self,
+        state: WorkflowState,
+        nodes: list[WorkflowNode],
+    ) -> list[dict]:
+        if not nodes:
+            return []
+
+        graph = StateGraph(dict)
+        for node in nodes:
+            graph.add_node(node.name, self._build_graph_node(node))
+
+        graph.add_edge(START, nodes[0].name)
+        for previous, current in zip(nodes, nodes[1:], strict=False):
+            graph.add_edge(previous.name, current.name)
+        graph.add_edge(nodes[-1].name, END)
+
+        app = graph.compile()
+        result = await app.ainvoke({"workflow_state": state, "trace": []})
+        return result["trace"]
+
+    def _build_graph_node(self, node: WorkflowNode):
+        async def run_node(graph_state: dict[str, Any]) -> dict[str, Any]:
+            workflow_state = graph_state["workflow_state"]
+            trace = graph_state["trace"]
+            await self._execute_node(workflow_state, node, trace)
+            return graph_state
+
+        return run_node
 
 
 def _trace_entry(
