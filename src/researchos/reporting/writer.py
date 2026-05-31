@@ -25,6 +25,10 @@ class ReportWriter(Protocol):
         evidence: Evidence,
         claim: Claim,
         verification: CitationVerification,
+        sources: list[Source] | None = None,
+        evidence_items: list[Evidence] | None = None,
+        claims: list[Claim] | None = None,
+        verifications: list[CitationVerification] | None = None,
     ) -> ReportDraft:
         """Build report artifacts from verified evidence."""
 
@@ -38,10 +42,21 @@ class EvidenceReportWriter:
         evidence: Evidence,
         claim: Claim,
         verification: CitationVerification,
+        sources: list[Source] | None = None,
+        evidence_items: list[Evidence] | None = None,
+        claims: list[Claim] | None = None,
+        verifications: list[CitationVerification] | None = None,
     ) -> ReportDraft:
+        sources = sources or [source]
+        evidence_items = evidence_items or [evidence]
+        claims = claims or [claim]
+        verifications = verifications or [verification]
         retrieval_backed = source.source_type == "file"
         summary = (
-            "This run used local text retrieval to select evidence before writing the report."
+            (
+                "This run used local text retrieval to select "
+                f"{len(evidence_items)} evidence chunk(s) before writing the report."
+            )
             if retrieval_backed
             else (
                 "This deterministic MVP validates the run lifecycle before real retrieval, "
@@ -53,17 +68,26 @@ class EvidenceReportWriter:
             if retrieval_backed
             else "ResearchOS MVP completed a deterministic evidence-first run loop.\n"
         )
-        markdown = self._build_markdown(run, source, evidence, claim, verification, summary)
+        markdown = self._build_markdown(
+            run,
+            sources,
+            evidence_items,
+            claims,
+            verifications,
+            summary,
+        )
         report_json = {
             "run_id": run.run_id,
             "title": "ResearchOS MVP Run Report",
             "summary": summary,
-            "claims": [claim.model_dump(mode="json")],
-            "evidence": [evidence.model_dump(mode="json")],
-            "sources": [source.model_dump(mode="json")],
-            "citations": [verification.model_dump(mode="json")],
+            "claims": [claim.model_dump(mode="json") for claim in claims],
+            "evidence": [evidence.model_dump(mode="json") for evidence in evidence_items],
+            "sources": [source.model_dump(mode="json") for source in sources],
+            "citations": [
+                verification.model_dump(mode="json") for verification in verifications
+            ],
             "limitations": [
-                "This MVP report is generated from one selected evidence chunk.",
+                "This MVP report is generated from selected local evidence chunks.",
                 "Future versions should use multiple sources, conflict checks, and LLM review.",
             ],
         }
@@ -76,13 +100,40 @@ class EvidenceReportWriter:
     def _build_markdown(
         self,
         run: ResearchRun,
-        source: Source,
-        evidence: Evidence,
-        claim: Claim,
-        verification: CitationVerification,
+        sources: list[Source],
+        evidence_items: list[Evidence],
+        claims: list[Claim],
+        verifications: list[CitationVerification],
         summary: str,
     ) -> str:
-        citation_label = f"{source.source_id}:{evidence.evidence_id}"
+        evidence_lines: list[str] = []
+        verification_lines: list[str] = []
+        for index, (source, evidence, claim, verification) in enumerate(
+            zip(sources, evidence_items, claims, verifications, strict=True),
+            start=1,
+        ):
+            citation_label = f"{source.source_id}:{evidence.evidence_id}"
+            evidence_lines.extend(
+                [
+                    f"### Evidence {index}",
+                    "",
+                    f"- Source: {source.title} (`{source.source_id}`)",
+                    f"- Evidence: {evidence.text}",
+                    f"- Citation: `{citation_label}`",
+                    "",
+                ]
+            )
+            verification_lines.extend(
+                [
+                    f"### Claim {index}",
+                    "",
+                    f"- Claim: {claim.text}",
+                    f"- Status: {verification.support_status}",
+                    f"- Rationale: {verification.rationale}",
+                    f"- Confidence: {verification.confidence:.2f}",
+                    "",
+                ]
+            )
         return "\n".join(
             [
                 "# ResearchOS MVP Run Report",
@@ -96,20 +147,15 @@ class EvidenceReportWriter:
                 "",
                 "## Evidence",
                 "",
-                f"- Source: {source.title} (`{source.source_id}`)",
-                f"- Evidence: {evidence.text}",
-                f"- Citation: `{citation_label}`",
+                *evidence_lines,
                 "",
                 "## Claim Verification",
                 "",
-                f"- Claim: {claim.text}",
-                f"- Status: {verification.support_status}",
-                f"- Rationale: {verification.rationale}",
-                f"- Confidence: {verification.confidence:.2f}",
+                *verification_lines,
                 "",
                 "## Limitations",
                 "",
-                "- This MVP report uses one selected evidence chunk.",
+                "- This MVP report uses selected local evidence chunks.",
                 "- Future versions should use multiple sources and conflict checks.",
                 "",
             ]
@@ -136,6 +182,10 @@ class LLMReportWriter:
         evidence: Evidence,
         claim: Claim,
         verification: CitationVerification,
+        sources: list[Source] | None = None,
+        evidence_items: list[Evidence] | None = None,
+        claims: list[Claim] | None = None,
+        verifications: list[CitationVerification] | None = None,
     ) -> ReportDraft:
         fallback = self.fallback_writer.write(
             run=run,
@@ -143,6 +193,10 @@ class LLMReportWriter:
             evidence=evidence,
             claim=claim,
             verification=verification,
+            sources=sources,
+            evidence_items=evidence_items,
+            claims=claims,
+            verifications=verifications,
         )
 
         try:

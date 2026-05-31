@@ -39,16 +39,26 @@ class RetrievalNode:
         self.retriever = retriever
 
     def execute(self, state: WorkflowState) -> NodeResult:
-        chunks = self.retriever.retrieve(state.run.query, state.run.documents, limit=1)
+        chunks = self.retriever.retrieve(state.run.query, state.run.documents, limit=3)
+        state.retrieved_chunks = chunks
         state.retrieved_chunk = chunks[0] if chunks else None
-        state.source = _build_source(state, state.retrieved_chunk)
+        state.sources = (
+            [_build_source(state, chunk, index) for index, chunk in enumerate(chunks)]
+            if chunks
+            else [_build_source(state, None, 0)]
+        )
+        state.source = state.sources[0]
         return NodeResult(
             node_name=self.name,
             status="searching",
             step_name="retrieving seed sources",
             completed_steps=1,
             event_type="source.retrieved",
-            payload=state.source.model_dump(mode="json"),
+            payload={
+                "run_id": state.run.run_id,
+                "retrieved_count": len(chunks),
+                "sources": [source.model_dump(mode="json") for source in state.sources],
+            },
         )
 
 
@@ -75,16 +85,30 @@ class EvidenceExtractionNode:
     name = "evidence_extraction"
 
     def execute(self, state: WorkflowState) -> NodeResult:
-        source = _require(state.source, "source")
-        state.evidence = _build_evidence(state, source, state.retrieved_chunk)
-        state.claim = _build_claim(state, state.evidence, state.retrieved_chunk)
+        sources = state.sources or [_require(state.source, "source")]
+        chunks = state.retrieved_chunks or [state.retrieved_chunk]
+        state.evidence_items = [
+            _build_evidence(state, source, chunks[index], index)
+            for index, source in enumerate(sources)
+        ]
+        state.claims = [
+            _build_claim(state, evidence, chunks[index], index)
+            for index, evidence in enumerate(state.evidence_items)
+        ]
+        state.evidence = state.evidence_items[0]
+        state.claim = state.claims[0]
         return NodeResult(
             node_name=self.name,
             status="extracting_evidence",
             step_name="extracting evidence spans",
             completed_steps=3,
             event_type="evidence.extracted",
-            payload=state.evidence.model_dump(mode="json"),
+            payload={
+                "run_id": state.run.run_id,
+                "evidence": [
+                    evidence.model_dump(mode="json") for evidence in state.evidence_items
+                ],
+            },
         )
 
 
@@ -95,20 +119,32 @@ class VerificationNode:
         self.citation_verifier = citation_verifier
 
     def execute(self, state: WorkflowState) -> NodeResult:
-        claim = _require(state.claim, "claim")
-        evidence = _require(state.evidence, "evidence")
-        state.verification = self.citation_verifier.verify(
-            claim=claim,
-            evidence=evidence,
-            retrieved_chunk=state.retrieved_chunk,
-        )
+        claims = state.claims or [_require(state.claim, "claim")]
+        evidence_items = state.evidence_items or [_require(state.evidence, "evidence")]
+        chunks = state.retrieved_chunks or [state.retrieved_chunk]
+        state.verifications = []
+        for index, claim in enumerate(claims):
+            verification = self.citation_verifier.verify(
+                claim=claim,
+                evidence=evidence_items[index],
+                retrieved_chunk=chunks[index],
+            )
+            verification.verification_id = _verification_id(verification.verification_id, index)
+            state.verifications.append(verification)
+        state.verification = state.verifications[0]
         return NodeResult(
             node_name=self.name,
             status="verifying",
             step_name="checking claim support",
             completed_steps=4,
             event_type="claim.verified",
-            payload=state.verification.model_dump(mode="json"),
+            payload={
+                "run_id": state.run.run_id,
+                "verifications": [
+                    verification.model_dump(mode="json")
+                    for verification in state.verifications
+                ],
+            },
         )
 
 
@@ -120,25 +156,29 @@ class ReportWritingNode:
         self.report_writer = report_writer
 
     def execute(self, state: WorkflowState) -> NodeResult:
-        source = _require(state.source, "source")
-        evidence = _require(state.evidence, "evidence")
-        claim = _require(state.claim, "claim")
-        verification = _require(state.verification, "verification")
+        sources = state.sources or [_require(state.source, "source")]
+        evidence_items = state.evidence_items or [_require(state.evidence, "evidence")]
+        claims = state.claims or [_require(state.claim, "claim")]
+        verifications = state.verifications or [_require(state.verification, "verification")]
 
         artifact_paths = write_evidence_artifacts(
             self.artifact_store,
             state,
-            source,
-            evidence,
-            claim,
-            verification,
+            sources,
+            evidence_items,
+            claims,
+            verifications,
         )
         state.report = self.report_writer.write(
             run=state.run,
-            source=source,
-            evidence=evidence,
-            claim=claim,
-            verification=verification,
+            source=sources[0],
+            evidence=evidence_items[0],
+            claim=claims[0],
+            verification=verifications[0],
+            sources=sources,
+            evidence_items=evidence_items,
+            claims=claims,
+            verifications=verifications,
         )
         self.artifact_store.write_text(state.run, "outputs/report.md", state.report.markdown)
         self.artifact_store.write_json(state.run, "outputs/report.json", state.report.report_json)
@@ -289,45 +329,38 @@ class EvaluationNode:
 def write_evidence_artifacts(
     artifact_store: ArtifactStore,
     state: WorkflowState,
-    source: Source,
-    evidence: Evidence,
-    claim: Claim,
-    verification: CitationVerification,
+    sources: list[Source],
+    evidence_items: list[Evidence],
+    claims: list[Claim],
+    verifications: list[CitationVerification],
 ) -> list[str]:
-    artifact_store.write_json(state.run, "evidence/sources.json", [source.model_dump(mode="json")])
+    artifact_store.write_json(
+        state.run,
+        "evidence/sources.json",
+        [source.model_dump(mode="json") for source in sources],
+    )
     artifact_store.write_json(
         state.run,
         "evidence/evidence.json",
-        [evidence.model_dump(mode="json")],
+        [evidence.model_dump(mode="json") for evidence in evidence_items],
     )
     artifact_store.write_json(
         state.run,
         "evidence/claims.json",
-        [claim.model_dump(mode="json")],
+        [claim.model_dump(mode="json") for claim in claims],
     )
     artifact_store.write_json(
         state.run,
         "evidence/citation_verification.json",
-        [verification.model_dump(mode="json")],
+        [verification.model_dump(mode="json") for verification in verifications],
     )
     artifact_store.write_json(
         state.run,
         "evidence/evidence_graph.json",
         {
             "run_id": state.run.run_id,
-            "nodes": [
-                {"id": source.source_id, "type": "source", "title": source.title},
-                {"id": evidence.evidence_id, "type": "evidence", "text": evidence.text},
-                {"id": claim.claim_id, "type": "claim", "text": claim.text},
-            ],
-            "edges": [
-                {
-                    "from": evidence.evidence_id,
-                    "to": source.source_id,
-                    "type": "derived_from",
-                },
-                {"from": claim.claim_id, "to": evidence.evidence_id, "type": "supported_by"},
-            ],
+            "nodes": _evidence_graph_nodes(sources, evidence_items, claims),
+            "edges": _evidence_graph_edges(sources, evidence_items, claims),
         },
     )
     artifact_paths = [
@@ -337,25 +370,27 @@ def write_evidence_artifacts(
         "evidence/citation_verification.json",
         "evidence/evidence_graph.json",
     ]
-    if state.retrieved_chunk is not None:
+    if state.retrieved_chunks:
         artifact_store.write_json(
             state.run,
             "sources/parsed/retrieval_results.json",
             [
                 {
-                    "document_index": state.retrieved_chunk.document_index,
-                    "title": state.retrieved_chunk.title,
-                    "text": state.retrieved_chunk.text,
-                    "score": state.retrieved_chunk.score,
-                    "url": state.retrieved_chunk.url,
+                    "rank": index + 1,
+                    "document_index": chunk.document_index,
+                    "title": chunk.title,
+                    "text": chunk.text,
+                    "score": chunk.score,
+                    "url": chunk.url,
                 }
+                for index, chunk in enumerate(state.retrieved_chunks)
             ],
         )
         artifact_paths.append("sources/parsed/retrieval_results.json")
     return artifact_paths
 
 
-def _build_source(state: WorkflowState, chunk: RetrievedChunk | None) -> Source:
+def _build_source(state: WorkflowState, chunk: RetrievedChunk | None, index: int) -> Source:
     if chunk is None:
         return Source(
             source_id="src_mvp_001",
@@ -368,8 +403,11 @@ def _build_source(state: WorkflowState, chunk: RetrievedChunk | None) -> Source:
             relevance_score=0.7,
         )
 
+    source_id = f"src_doc_{chunk.document_index + 1:03d}"
+    if index > 0:
+        source_id = f"{source_id}_{index + 1:03d}"
     return Source(
-        source_id=f"src_doc_{chunk.document_index + 1:03d}",
+        source_id=source_id,
         run_id=state.run.run_id,
         source_type="file",
         title=chunk.title,
@@ -384,6 +422,7 @@ def _build_evidence(
     state: WorkflowState,
     source: Source,
     chunk: RetrievedChunk | None,
+    index: int,
 ) -> Evidence:
     if chunk is None:
         return Evidence(
@@ -399,7 +438,7 @@ def _build_evidence(
         )
 
     return Evidence(
-        evidence_id="ev_local_001",
+        evidence_id=f"ev_local_{index + 1:03d}",
         source_id=source.source_id,
         run_id=state.run.run_id,
         text=chunk.text,
@@ -412,6 +451,7 @@ def _build_claim(
     state: WorkflowState,
     evidence: Evidence,
     chunk: RetrievedChunk | None,
+    index: int,
 ) -> Claim:
     if chunk is None:
         return Claim(
@@ -425,14 +465,65 @@ def _build_claim(
         )
 
     return Claim(
-        claim_id="claim_local_001",
+        claim_id=f"claim_local_{index + 1:03d}",
         run_id=state.run.run_id,
-        text=f"The supplied local documents contain evidence relevant to: {state.run.query}",
+        text=(
+            "A supplied local document contains evidence relevant to "
+            f"'{state.run.query}' from chunk {index + 1}."
+        ),
         claim_type="analysis",
         evidence_ids=[evidence.evidence_id],
         confidence=min(1.0, max(0.3, chunk.score)),
         verification_status="supported",
     )
+
+
+def _verification_id(base_id: str, index: int) -> str:
+    if index == 0:
+        return base_id
+    return f"{base_id}_{index + 1:03d}"
+
+
+def _evidence_graph_nodes(
+    sources: list[Source],
+    evidence_items: list[Evidence],
+    claims: list[Claim],
+) -> list[dict]:
+    return [
+        *[
+            {"id": source.source_id, "type": "source", "title": source.title}
+            for source in sources
+        ],
+        *[
+            {"id": evidence.evidence_id, "type": "evidence", "text": evidence.text}
+            for evidence in evidence_items
+        ],
+        *[{"id": claim.claim_id, "type": "claim", "text": claim.text} for claim in claims],
+    ]
+
+
+def _evidence_graph_edges(
+    sources: list[Source],
+    evidence_items: list[Evidence],
+    claims: list[Claim],
+) -> list[dict]:
+    edges: list[dict] = []
+    for source, evidence, claim in zip(sources, evidence_items, claims, strict=True):
+        edges.append(
+            {
+                "from": evidence.evidence_id,
+                "to": source.source_id,
+                "type": "derived_from",
+            }
+        )
+        edges.append(
+            {
+                "from": claim.claim_id,
+                "to": evidence.evidence_id,
+                "type": "supported_by",
+            }
+        )
+    return edges
 
 
 def _require(value, name: str):

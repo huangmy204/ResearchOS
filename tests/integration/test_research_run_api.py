@@ -338,6 +338,74 @@ def test_research_run_uses_local_documents_for_evidence(tmp_path):
         assert trace_body["nodes"][5]["node"] == "report_writing"
 
 
+def test_research_run_builds_top_k_evidence_bundle(tmp_path):
+    app = create_app(
+        Settings(
+            env="test",
+            workspace_root=tmp_path / "workspace",
+            runtime_profile="test",
+            log_level="INFO",
+            api_host="127.0.0.1",
+            api_port=8000,
+            cors_allow_origins=[],
+        )
+    )
+    app.state.services.workflow.step_delay_sec = 0
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/research-runs",
+            json={
+                "session_id": "session",
+                "query": "legal research citation risk",
+                "documents": [
+                    {
+                        "title": "Citation risk memo",
+                        "text": (
+                            "Legal research citation risk increases when sources are unchecked."
+                        ),
+                    },
+                    {
+                        "title": "Agent research memo",
+                        "text": (
+                            "AI agents can support legal research by collecting citation evidence."
+                        ),
+                    },
+                    {
+                        "title": "Verification memo",
+                        "text": (
+                            "Citation verification reduces legal research risk "
+                            "in generated reports."
+                        ),
+                    },
+                ],
+            },
+        )
+        run_id = response.json()["run_id"]
+        _wait_for_run_completion(client, run_id)
+
+        bundle = client.get(f"/v1/research-runs/{run_id}/evidence").json()
+        retrieval_results = client.get(
+            f"/v1/research-runs/{run_id}/artifacts/content",
+            params={"path": "sources/parsed/retrieval_results.json"},
+        ).json()
+        report = client.get(
+            f"/v1/research-runs/{run_id}/artifacts/content",
+            params={"path": "outputs/report.md"},
+        )
+
+    assert len(retrieval_results) == 3
+    assert [result["rank"] for result in retrieval_results] == [1, 2, 3]
+    assert len(bundle["sources"]) == 3
+    assert len(bundle["evidence"]) == 3
+    assert len(bundle["claims"]) == 3
+    assert len(bundle["citation_verification"]) == 3
+    assert len(bundle["evidence_graph"]["nodes"]) == 9
+    assert len(bundle["evidence_graph"]["edges"]) == 6
+    assert "### Evidence 1" in report.text
+    assert "### Evidence 3" in report.text
+
+
 def test_research_run_can_use_langgraph_workflow_engine(tmp_path):
     app = create_app(
         Settings(

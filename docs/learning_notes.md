@@ -16,6 +16,13 @@
 4. Git 操作点回答“这次改动在版本管理里应该如何看、如何提交、如何回滚”。
 5. 面试文档放在 `docs/interview/`，用于整理可直接复述的项目讲法。
 
+## 长期技术方向
+
+1. 项目后续要从普通 RAG workflow 演进到 agentic workflow。
+2. agentic workflow 的重点不是简单串联节点，而是让节点具备规划、工具选择、反思、重试、分支和循环能力。
+3. 后续讲解 LangGraph、RAG、检索、验证和报告生成时，都要说明它们如何服务于 agentic workflow。
+4. 面试表达里要能讲清楚：当前 MVP 是稳定工程底座，后续 agentic workflow 是在这个底座上增加自主决策能力。
+
 ## 讲义风格
 
 1. 全部使用中文。
@@ -46,8 +53,9 @@
 18. 最小 LangGraph engine 与顺序图映射。
 19. 通过配置切换 workflow engine。
 20. LangGraph 条件边与证据不足分支。
-21. LangGraph checkpoint 与复杂编排。
-22. Docker 沙箱与部署。
+21. RAG top-k 多证据检索与 evidence bundle。
+22. LangGraph checkpoint 与复杂编排。
+23. Docker 沙箱与部署。
 
 ## 文档目录
 
