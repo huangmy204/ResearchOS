@@ -63,8 +63,9 @@
 28. Retrieval quality gate 与 agentic workflow 分支。
 29. Query rewrite、检索重试与 agentic feedback loop。
 30. Multi-query retrieval、子问题检索与问题升阶。
-31. LangGraph checkpoint 与复杂编排。
-32. Docker 沙箱与部署。
+31. Local corpus ingestion、本地语料接入与 manifest 追踪。
+32. LangGraph checkpoint 与复杂编排。
+33. Docker 沙箱与部署。
 
 ## 文档目录
 

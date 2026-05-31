@@ -11,6 +11,7 @@ def test_load_local_env_reads_key_value_pairs(tmp_path, monkeypatch):
                 "# local secrets",
                 "RESEARCHOS_LLM_CLIENT=openai_compatible",
                 "RESEARCHOS_WORKFLOW_ENGINE=langgraph",
+                "RESEARCHOS_CORPUS_ROOT=workspace/test_corpus",
                 "RESEARCHOS_RETRIEVAL_CHUNK_CHARS=900",
                 "RESEARCHOS_RETRIEVAL_CHUNK_OVERLAP_CHARS=120",
                 "RESEARCHOS_RETRIEVAL_TOP_K=4",
@@ -27,6 +28,7 @@ def test_load_local_env_reads_key_value_pairs(tmp_path, monkeypatch):
 
     monkeypatch.delenv("RESEARCHOS_LLM_CLIENT", raising=False)
     monkeypatch.delenv("RESEARCHOS_WORKFLOW_ENGINE", raising=False)
+    monkeypatch.delenv("RESEARCHOS_CORPUS_ROOT", raising=False)
     monkeypatch.delenv("RESEARCHOS_RETRIEVAL_CHUNK_CHARS", raising=False)
     monkeypatch.delenv("RESEARCHOS_RETRIEVAL_CHUNK_OVERLAP_CHARS", raising=False)
     monkeypatch.delenv("RESEARCHOS_RETRIEVAL_TOP_K", raising=False)
@@ -42,6 +44,7 @@ def test_load_local_env_reads_key_value_pairs(tmp_path, monkeypatch):
     assert loaded is True
     assert get_settings().llm_client == "openai_compatible"
     assert get_settings().workflow_engine == "langgraph"
+    assert get_settings().corpus_root.as_posix() == "workspace/test_corpus"
     assert get_settings().retrieval_chunk_chars == 900
     assert get_settings().retrieval_chunk_overlap_chars == 120
     assert get_settings().retrieval_top_k == 4

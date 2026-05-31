@@ -344,6 +344,58 @@ def test_research_run_uses_local_documents_for_evidence(tmp_path):
         assert trace_body["nodes"][5]["node"] == "report_writing"
 
 
+def test_research_run_can_load_documents_from_local_corpus(tmp_path):
+    workspace_root = tmp_path / "workspace"
+    corpus_root = workspace_root / "corpus"
+    corpus_root.mkdir(parents=True)
+    (corpus_root / "legal.md").write_text(
+        "# Legal Citation Memo\n\nUnsupported citations create legal research risk.",
+        encoding="utf-8",
+    )
+    app = create_app(
+        Settings(
+            env="test",
+            workspace_root=workspace_root,
+            corpus_root=corpus_root,
+            runtime_profile="test",
+            log_level="INFO",
+            api_host="127.0.0.1",
+            api_port=8000,
+            cors_allow_origins=[],
+        )
+    )
+    app.state.services.workflow.step_delay_sec = 0
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/research-runs",
+            json={
+                "session_id": "session",
+                "query": "legal citation risk",
+                "options": {"include_corpus": True},
+            },
+        )
+        run_id = response.json()["run_id"]
+        run = _wait_for_run_completion(client, run_id)
+        manifest = client.get(
+            f"/v1/research-runs/{run_id}/artifacts/content",
+            params={"path": "inputs/corpus_manifest.json"},
+        ).json()
+        sources = client.get(
+            f"/v1/research-runs/{run_id}/artifacts/content",
+            params={"path": "evidence/sources.json"},
+        ).json()
+        events = client.get(f"/v1/research-runs/{run_id}/events/history").json()["events"]
+
+    assert run["status"] == "completed"
+    assert run["documents"][0]["title"] == "Legal Citation Memo"
+    assert run["documents"][0]["url"] == "corpus://legal.md"
+    assert manifest["document_count"] == 1
+    assert manifest["files"][0]["path"] == "legal.md"
+    assert sources[0]["title"] == "Legal Citation Memo"
+    assert "corpus.loaded" in [event["event_type"] for event in events]
+
+
 def test_research_run_builds_top_k_evidence_bundle(tmp_path):
     app = create_app(
         Settings(

@@ -8,6 +8,7 @@ from fastapi.responses import StreamingResponse
 
 from researchos.api.deps import get_services
 from researchos.api.services import AppServices
+from researchos.ingestion import LoadedCorpus
 from researchos.models.event import ResearchEventListResponse
 from researchos.models.run import (
     ResearchRun,
@@ -24,12 +25,43 @@ async def create_research_run(
     request: ResearchRunCreate,
     services: Annotated[AppServices, Depends(get_services)],
 ) -> ResearchRunCreateResponse:
+    try:
+        loaded_corpus = _load_requested_corpus(request, services)
+    except (FileNotFoundError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    request = _merge_corpus_documents(request, loaded_corpus)
     existing = services.run_store.find_by_request_id(request)
     if existing is not None:
         return _create_response(existing)
 
     run = services.run_store.create(request)
     services.event_store.append(run, "run.created", {"run_id": run.run_id, "query": run.query})
+    if loaded_corpus.files:
+        services.artifact_store.write_json(
+            run,
+            "inputs/corpus_manifest.json",
+            {
+                "run_id": run.run_id,
+                "document_count": len(loaded_corpus.documents),
+                "files": [
+                    {
+                        "path": file.path,
+                        "title": file.title,
+                        "size_bytes": file.size_bytes,
+                    }
+                    for file in loaded_corpus.files
+                ],
+            },
+        )
+        services.event_store.append(
+            run,
+            "corpus.loaded",
+            {
+                "run_id": run.run_id,
+                "document_count": len(loaded_corpus.documents),
+            },
+        )
     asyncio.create_task(services.workflow.run(run.run_id))
     return _create_response(run)
 
@@ -47,6 +79,32 @@ def _create_response(run: ResearchRun) -> ResearchRunCreateResponse:
         status=run.status,
         events_url=f"/v1/research-runs/{run.run_id}/events",
         artifacts_url=f"/v1/research-runs/{run.run_id}/artifacts",
+    )
+
+
+def _load_requested_corpus(
+    request: ResearchRunCreate,
+    services: AppServices,
+) -> LoadedCorpus:
+    include_corpus = bool(request.options.get("include_corpus", False))
+    corpus_paths = request.options.get("corpus_paths")
+    if corpus_paths is not None and not isinstance(corpus_paths, list):
+        raise ValueError("options.corpus_paths must be a list of relative paths.")
+    if corpus_paths is not None and not all(isinstance(path, str) for path in corpus_paths):
+        raise ValueError("options.corpus_paths must contain only strings.")
+    if not include_corpus and not corpus_paths:
+        return LoadedCorpus(documents=[], files=[])
+    return services.corpus_loader.load(relative_paths=corpus_paths)
+
+
+def _merge_corpus_documents(
+    request: ResearchRunCreate,
+    loaded_corpus: LoadedCorpus,
+) -> ResearchRunCreate:
+    if not loaded_corpus.documents:
+        return request
+    return request.model_copy(
+        update={"documents": [*request.documents, *loaded_corpus.documents]}
     )
 
 
