@@ -21,7 +21,7 @@ scripts/demo_corpus_run.ps1
 在项目根目录运行：
 
 ```powershell
-.\.venv\Scripts\python.exe -m uvicorn researchos.api.main:app --reload --host 127.0.0.1 --port 8000
+.\scripts\start_api.ps1
 ```
 
 如果你已经有服务在跑，就不用重复启动。

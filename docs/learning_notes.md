@@ -68,8 +68,9 @@
 33. Corpus 写入 API、路径安全与资料入库闭环。
 34. 手动端到端 demo、Corpus 到 Research Run 的完整链路。
 35. Corpus index manifest、文件 hash 与增量索引前置设计。
-36. LangGraph checkpoint 与复杂编排。
-37. Docker 沙箱与部署。
+36. MVP-first 策略、最小可运行系统与后续优化边界。
+37. LangGraph checkpoint 与复杂编排。
+38. Docker 沙箱与部署。
 
 ## 文档目录
 
